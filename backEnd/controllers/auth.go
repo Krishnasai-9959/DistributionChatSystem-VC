@@ -6,6 +6,7 @@ import (
 	"backEnd/utils"
 	"context"
 	"time"
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -115,6 +116,70 @@ func Register(c *gin.Context) {
 	c.JSON(201, gin.H{
 		"message": "User registered successfully",
 		"user_id": result.InsertedID,
+	})
+}
+func RefreshToken(c *gin.Context) {
+
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	// Bind request body
+	if err := c.BindJSON(&body); err != nil {
+
+		c.JSON(400, gin.H{
+			"error": "Invalid request",
+		})
+
+		return
+	}
+
+	// Validate refresh token
+	token, err := utils.ValidateRefreshToken(
+		body.RefreshToken,
+	)
+
+	if err != nil || !token.Valid {
+
+		c.JSON(401, gin.H{
+			"error": "Invalid refresh token",
+		})
+
+		return
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+
+	if !ok {
+
+		c.JSON(401, gin.H{
+			"error": "Invalid token claims",
+		})
+
+		return
+	}
+
+	userID := claims["user_id"].(string)
+	email := claims["email"].(string)
+
+	// Generate new access token
+	newAccessToken, err := utils.GenerateAccessToken(
+		userID,
+		email,
+	)
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Failed to generate access token",
+		})
+
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"access_token": newAccessToken,
 	})
 }
 
