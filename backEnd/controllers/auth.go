@@ -203,6 +203,23 @@ func ForgotPassword(c *gin.Context) {
 
 		return
 	}
+	requestKey := "otp_requests:" + body.Email
+
+	requestCount, _ := database.RedisClient.Get(
+		database.Ctx,
+		requestKey,
+	).Int()
+	//if the otp requests sent more than 3 times by clicking resend otp then block the user for 5mins and reset the count after 5 mins
+
+	// Max 3 OTP requests
+	if requestCount >= 3 {
+
+		c.JSON(429, gin.H{
+			"error": "Too many OTP requests. Try again later",
+		})
+
+		return
+	}
 
 	collection := database.DB.Collection("users")
 
