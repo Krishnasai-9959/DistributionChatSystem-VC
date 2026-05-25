@@ -492,6 +492,53 @@ func ResendOTP(c *gin.Context) {
 	})
 }
 
+// reset password
+func ResetPassword(c *gin.Context) {
+	var body struct {
+		Email       string `json:"email"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(400, gin.H{
+			"error": "Invalid request",
+		})
+		return
+	}
+	if !utils.ValidatePassword(body.NewPassword) {
+		c.JSON(400, gin.H{
+			"error": "Password must contain 8+ characters, 1 uppercase letter, 1 number and 1 special character",
+		})
+		return
+	}
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Password hashing failed",
+		})
+		return
+	}
+	collection := database.DB.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	update := bson.M{"$set": bson.M{"password": string(hashedPassword)}}
+	result, err := collection.UpdateOne(ctx, bson.M{"email": body.Email}, update)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": "Failed to update password",
+		})
+		return
+	}
+	if result.MatchedCount == 0 {
+		c.JSON(404, gin.H{
+			"error": "Email not found",
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"message": "Password reset successful",
+	})
+}
+
 // Login
 func Login(c *gin.Context) {
 
