@@ -119,6 +119,8 @@ func Register(c *gin.Context) {
 		"user_id": result.InsertedID,
 	})
 }
+
+// Refresh Token
 func RefreshToken(c *gin.Context) {
 
 	var body struct {
@@ -183,18 +185,23 @@ func RefreshToken(c *gin.Context) {
 		"access_token": newAccessToken,
 	})
 }
+
+// Logout
 func Logout(c *gin.Context) {
+
 	c.JSON(200, gin.H{
 		"message": "Logout successful",
 	})
 }
 
+// Forgot Password
 func ForgotPassword(c *gin.Context) {
 
 	var body struct {
 		Email string `json:"email"`
 	}
 
+	// Parse request
 	if err := c.BindJSON(&body); err != nil {
 
 		c.JSON(400, gin.H{
@@ -203,15 +210,17 @@ func ForgotPassword(c *gin.Context) {
 
 		return
 	}
+
+	// OTP request protection
 	requestKey := "otp_requests:" + body.Email
 
 	requestCount, _ := database.RedisClient.Get(
 		database.Ctx,
 		requestKey,
 	).Int()
-	//if the otp requests sent more than 3 times by clicking resend otp then block the user for 5mins and reset the count after 5 mins
 
-	// Max 3 OTP requests
+	// If OTP requested more than 3 times
+	// block for 5 mins
 	if requestCount >= 3 {
 
 		c.JSON(429, gin.H{
@@ -267,8 +276,11 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	// Send Email
-	err = utils.SendOTPEmail(body.Email, otp)
+	// Send OTP Email
+	err = utils.SendOTPEmail(
+		body.Email,
+		otp,
+	)
 
 	if err != nil {
 
@@ -279,51 +291,213 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
+	// Increase OTP request count
+	database.RedisClient.Incr(
+		database.Ctx,
+		requestKey,
+	)
+
+	// Expire request counter after 5 mins
+	database.RedisClient.Expire(
+		database.Ctx,
+		requestKey,
+		5*time.Minute,
+	)
+
 	c.JSON(200, gin.H{
 		"message": "OTP sent successfully",
 	})
 }
 
-// verify otp
+// Verify OTP
 func VerifyOTP(c *gin.Context) {
+
 	var body struct {
 		Email string `json:"email"`
 		OTP   string `json:"otp"`
 	}
+
+	// Parse request
 	if err := c.BindJSON(&body); err != nil {
+
 		c.JSON(400, gin.H{
 			"error": "Invalid request",
 		})
+
 		return
 	}
-	//Get otp from redis
+
+	// OTP brute force protection
+	attemptKey := "otp_attempts:" + body.Email
+
+	attempts, _ := database.RedisClient.Get(
+		database.Ctx,
+		attemptKey,
+	).Int()
+
+	// If wrong OTP entered more than 5 times
+	// block user temporarily
+	if attempts >= 5 {
+
+		c.JSON(429, gin.H{
+			"error": "Too many OTP attempts. Try again later",
+		})
+
+		return
+	}
+
+	// Get stored OTP
 	storedOTP, err := database.RedisClient.Get(
 		database.Ctx,
 		body.Email,
 	).Result()
+
 	if err != nil {
+
 		c.JSON(400, gin.H{
-			"error": "OTP expired or invalid",
+			"error": "OTP expired or not found",
 		})
+
 		return
 	}
 
+	// Wrong OTP
 	if storedOTP != body.OTP {
-		c.JSON(400, gin.H{
+
+		// Increase failed OTP attempts
+		database.RedisClient.Incr(
+			database.Ctx,
+			attemptKey,
+		)
+
+		// Expire attempts counter after 10 mins
+		database.RedisClient.Expire(
+			database.Ctx,
+			attemptKey,
+			10*time.Minute,
+		)
+
+		c.JSON(401, gin.H{
 			"error": "Invalid OTP",
 		})
+
 		return
 	}
+
+	// OTP correct
+
+	// Clear brute force attempts
+	database.RedisClient.Del(
+		database.Ctx,
+		attemptKey,
+	)
+
+	// Delete OTP after successful verification
+	database.RedisClient.Del(
+		database.Ctx,
+		body.Email,
+	)
+
 	c.JSON(200, gin.H{
 		"message": "OTP verified successfully",
 	})
 }
 
-// Login function
+// Resend OTP
+func ResendOTP(c *gin.Context) {
+
+	var body struct {
+		Email string `json:"email"`
+	}
+
+	// Parse request
+	if err := c.BindJSON(&body); err != nil {
+
+		c.JSON(400, gin.H{
+			"error": "Invalid request",
+		})
+
+		return
+	}
+
+	// OTP request protection
+	requestKey := "otp_requests:" + body.Email
+
+	requestCount, _ := database.RedisClient.Get(
+		database.Ctx,
+		requestKey,
+	).Int()
+
+	// If OTP requested more than 3 times
+	// block user for 5 mins
+	if requestCount >= 3 {
+
+		c.JSON(429, gin.H{
+			"error": "Too many OTP requests. Try again later",
+		})
+
+		return
+	}
+
+	// Generate new OTP
+	otp := utils.GenerateOTP()
+
+	// Replace old OTP
+	err := database.RedisClient.Set(
+		database.Ctx,
+		body.Email,
+		otp,
+		5*time.Minute,
+	).Err()
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Failed to store OTP",
+		})
+
+		return
+	}
+
+	// Send email
+	err = utils.SendOTPEmail(
+		body.Email,
+		otp,
+	)
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Failed to send OTP",
+		})
+
+		return
+	}
+
+	// Increase OTP request count
+	database.RedisClient.Incr(
+		database.Ctx,
+		requestKey,
+	)
+
+	// Expire request counter after 5 mins
+	database.RedisClient.Expire(
+		database.Ctx,
+		requestKey,
+		5*time.Minute,
+	)
+
+	c.JSON(200, gin.H{
+		"message": "OTP resent successfully",
+	})
+}
+
+// Login
 func Login(c *gin.Context) {
 
 	var user models.User
 
+	// Parse request body
 	if err := c.BindJSON(&user); err != nil {
 
 		c.JSON(400, gin.H{
@@ -344,6 +518,7 @@ func Login(c *gin.Context) {
 
 	var existingUser models.User
 
+	// Find user
 	err := collection.FindOne(
 		ctx,
 		bson.M{"email": user.Email},
@@ -358,6 +533,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Compare password
 	err = bcrypt.CompareHashAndPassword(
 		[]byte(existingUser.Password),
 		[]byte(user.Password),
@@ -372,6 +548,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Generate access token
 	accessToken, err := utils.GenerateAccessToken(
 		existingUser.ID.Hex(),
 		existingUser.Email,
@@ -386,6 +563,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Generate refresh token
 	refreshToken, err := utils.GenerateRefreshToken(
 		existingUser.ID.Hex(),
 		existingUser.Email,
@@ -399,6 +577,7 @@ func Login(c *gin.Context) {
 
 		return
 	}
+
 	c.JSON(200, gin.H{
 		"message":       "Login successful",
 		"access_token":  accessToken,

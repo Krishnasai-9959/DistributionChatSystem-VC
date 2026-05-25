@@ -15,6 +15,7 @@ func AuthRoutes(router *gin.Engine) {
 	router.POST("/refresh-token", controllers.RefreshToken)
 	router.POST("/forgot-password", controllers.ForgotPassword)
 	router.POST("/verify-otp", controllers.VerifyOTP)
+	router.POST("/resend-otp", controllers.ResendOTP)
 
 	// Protected routes
 	protected := router.Group("/api")
