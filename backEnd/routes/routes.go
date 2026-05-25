@@ -13,6 +13,8 @@ func AuthRoutes(router *gin.Engine) {
 	router.POST("/register", controllers.Register)
 	router.POST("/login", controllers.Login)
 	router.POST("/refresh-token", controllers.RefreshToken)
+	router.POST("/forgot-password", controllers.ForgotPassword)
+	router.POST("/verify-otp", controllers.VerifyOTP)
 
 	// Protected routes
 	protected := router.Group("/api")
@@ -20,4 +22,5 @@ func AuthRoutes(router *gin.Engine) {
 	protected.Use(middleware.AuthMiddleware())
 
 	protected.GET("/profile", controllers.GetProfile)
+	protected.POST("/logout", controllers.Logout)
 }

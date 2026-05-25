@@ -6,6 +6,7 @@ import (
 	"backEnd/utils"
 	"context"
 	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/gin-gonic/gin"
@@ -182,6 +183,124 @@ func RefreshToken(c *gin.Context) {
 		"access_token": newAccessToken,
 	})
 }
+func Logout(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"message": "Logout successful",
+	})
+}
+
+func ForgotPassword(c *gin.Context) {
+
+	var body struct {
+		Email string `json:"email"`
+	}
+
+	if err := c.BindJSON(&body); err != nil {
+
+		c.JSON(400, gin.H{
+			"error": "Invalid request",
+		})
+
+		return
+	}
+
+	collection := database.DB.Collection("users")
+
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+
+	defer cancel()
+
+	var user models.User
+
+	// Check email exists
+	err := collection.FindOne(
+		ctx,
+		bson.M{"email": body.Email},
+	).Decode(&user)
+
+	if err != nil {
+
+		c.JSON(404, gin.H{
+			"error": "Email not found",
+		})
+
+		return
+	}
+
+	// Generate OTP
+	otp := utils.GenerateOTP()
+
+	// Store OTP in Redis for 5 mins
+	err = database.RedisClient.Set(
+		database.Ctx,
+		body.Email,
+		otp,
+		5*time.Minute,
+	).Err()
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Failed to store OTP",
+		})
+
+		return
+	}
+
+	// Send Email
+	err = utils.SendOTPEmail(body.Email, otp)
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Failed to send email",
+		})
+
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "OTP sent successfully",
+	})
+}
+
+// verify otp
+func VerifyOTP(c *gin.Context) {
+	var body struct {
+		Email string `json:"email"`
+		OTP   string `json:"otp"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(400, gin.H{
+			"error": "Invalid request",
+		})
+		return
+	}
+	//Get otp from redis
+	storedOTP, err := database.RedisClient.Get(
+		database.Ctx,
+		body.Email,
+	).Result()
+	if err != nil {
+		c.JSON(400, gin.H{
+			"error": "OTP expired or invalid",
+		})
+		return
+	}
+
+	if storedOTP != body.OTP {
+		c.JSON(400, gin.H{
+			"error": "Invalid OTP",
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"message": "OTP verified successfully",
+	})
+}
 
 // Login function
 func Login(c *gin.Context) {
@@ -237,40 +356,40 @@ func Login(c *gin.Context) {
 	}
 
 	accessToken, err := utils.GenerateAccessToken(
-	existingUser.ID.Hex(),
-	existingUser.Email,
-)
+		existingUser.ID.Hex(),
+		existingUser.Email,
+	)
 
-if err != nil {
+	if err != nil {
 
-	c.JSON(500, gin.H{
-		"error": "Access token generation failed",
+		c.JSON(500, gin.H{
+			"error": "Access token generation failed",
+		})
+
+		return
+	}
+
+	refreshToken, err := utils.GenerateRefreshToken(
+		existingUser.ID.Hex(),
+		existingUser.Email,
+	)
+
+	if err != nil {
+
+		c.JSON(500, gin.H{
+			"error": "Refresh token generation failed",
+		})
+
+		return
+	}
+	c.JSON(200, gin.H{
+		"message":       "Login successful",
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"user": gin.H{
+			"id":       existingUser.ID,
+			"username": existingUser.Username,
+			"email":    existingUser.Email,
+		},
 	})
-
-	return
-}
-
-refreshToken, err := utils.GenerateRefreshToken(
-	existingUser.ID.Hex(),
-	existingUser.Email,
-)
-
-if err != nil {
-
-	c.JSON(500, gin.H{
-		"error": "Refresh token generation failed",
-	})
-
-	return
-}
-c.JSON(200, gin.H{
-	"message": "Login successful",
-	"access_token": accessToken,
-	"refresh_token": refreshToken,
-	"user": gin.H{
-		"id": existingUser.ID,
-		"username": existingUser.Username,
-		"email": existingUser.Email,
-	},
-})
 }
