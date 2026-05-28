@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"backEnd/controllers"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
@@ -18,17 +20,18 @@ var upgrader = websocket.Upgrader{
 
 	CheckOrigin: func(r *http.Request) bool {
 
-		origin := r.Header.Get("Origin")
+		return true
+		// origin := r.Header.Get("Origin")
 
-		allowedOrigins := map[string]bool{
+		// allowedOrigins := map[string]bool{
 
-			"http://localhost:3000": true,
-			"http://localhost:5173": true,
+		// 	"http://localhost:3000": true,
+		// 	"http://localhost:5173": true,
 
-			"https://yourfrontend.com": true,
-		}
+		// 	"https://yourfrontend.com": true,
+		// }
 
-		return allowedOrigins[origin]
+		// return allowedOrigins[origin]
 	},
 }
 
@@ -145,6 +148,12 @@ func HandleConnections(c *gin.Context) {
 
 		fmt.Println("Message received:")
 		fmt.Println(msg)
+		err = controllers.SaveMessage(msg)
+
+		if err != nil {
+
+			fmt.Println("Message save error:", err)
+		}
 
 		// send to private router
 		broadcast <- msg
@@ -179,11 +188,17 @@ func HandleMessages() {
 				mutex.Lock()
 				delete(clients, msg.ReceiverID)
 				mutex.Unlock()
+
+				fmt.Println("Removed offline user:", msg.ReceiverID)
+
+			} else {
+
+				fmt.Println("Message delivered successfully")
 			}
 
 		} else {
 
-			fmt.Println("Receiver offline")
+			fmt.Println("Receiver offline:", msg.ReceiverID)
 		}
 	}
 }
