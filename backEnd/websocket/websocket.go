@@ -148,6 +148,8 @@ func HandleConnections(c *gin.Context) {
 
 		fmt.Println("Message received:")
 		fmt.Println(msg)
+		msg.Type = "text"
+		msg.Status = "sent"
 		err = controllers.SaveMessage(msg)
 
 		if err != nil {
