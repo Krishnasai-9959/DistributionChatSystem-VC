@@ -1,0 +1,8 @@
+.chat-dashboard-page {
+
+    display: flex;
+
+    height: 100vh;
+
+    background-color: #f8fafc;
+}

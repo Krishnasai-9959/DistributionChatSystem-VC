@@ -1,0 +1,19 @@
+.chat-area {
+
+    flex: 1;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    background-color: #f8fafc;
+}
+
+.chat-empty-state {
+
+    color: #64748b;
+
+    font-size: 18px;
+}

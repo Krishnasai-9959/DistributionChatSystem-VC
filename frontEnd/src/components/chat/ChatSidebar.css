@@ -1,0 +1,46 @@
+.chat-sidebar {
+
+    width: 350px;
+
+    border-right: 1px solid #e2e8f0;
+
+    background-color: white;
+
+    display: flex;
+
+    flex-direction: column;
+}
+
+.chat-sidebar-header {
+
+    padding: 20px;
+
+    font-size: 24px;
+
+    font-weight: 700;
+
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.chat-sidebar-search {
+
+    padding: 15px;
+}
+
+.chat-sidebar-search input {
+
+    width: 100%;
+
+    padding: 12px;
+
+    border-radius: 8px;
+
+    border: 1px solid #cbd5e1;
+}
+
+.chat-sidebar-conversations {
+
+    flex: 1;
+
+    overflow-y: auto;
+}

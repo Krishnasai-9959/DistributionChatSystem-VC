@@ -1,0 +1,52 @@
+.conversation-item {
+
+    padding: 15px;
+
+    border-bottom: 1px solid #f1f5f9;
+
+    cursor: pointer;
+}
+
+.conversation-item:hover {
+
+    background-color: #f8fafc;
+}
+
+.conversation-header {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    font-weight: 600;
+}
+
+.conversation-message {
+
+    margin-top: 5px;
+
+    color: #64748b;
+}
+
+.conversation-unread {
+
+    margin-top: 8px;
+
+    width: 24px;
+
+    height: 24px;
+
+    border-radius: 50%;
+
+    background-color: #2563eb;
+
+    color: white;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    font-size: 12px;
+}

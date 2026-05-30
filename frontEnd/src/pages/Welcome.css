@@ -1,0 +1,48 @@
+.welcome-page {
+
+    min-height: 100vh;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background-color: #f5f7fb;
+}
+
+.welcome-card {
+
+    width: 500px;
+
+    padding: 40px;
+
+    border-radius: 16px;
+
+    text-align: center;
+
+    background-color: white;
+
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.welcome-title {
+
+    margin-top: 20px;
+
+    font-size: 2rem;
+
+    font-weight: 700;
+}
+
+.welcome-message {
+
+    margin-top: 10px;
+
+    color: #475569;
+}
+
+.welcome-redirect {
+
+    margin-top: 20px;
+
+    color: #2563eb;
+}

@@ -1,0 +1,102 @@
+.verify-otp-page {
+
+    min-height: 100vh;
+
+    display: flex;
+
+    justify-content: center;
+
+    align-items: center;
+
+    background-color: #f5f7fb;
+}
+
+.verify-otp-card {
+
+    width: 450px;
+
+    padding: 40px;
+
+    border-radius: 16px;
+
+    background-color: white;
+
+    box-shadow: 0 8px 30px rgba(
+        0,
+        0,
+        0,
+        0.08
+    );
+}
+
+.verify-otp-email {
+
+    color: #2563eb;
+
+    font-weight: 600;
+}
+
+.verify-otp-input {
+
+    width: 100%;
+
+    padding: 12px;
+
+    margin-top: 20px;
+
+    border-radius: 8px;
+
+    border: 1px solid #cbd5e1;
+}
+
+.verify-otp-button {
+
+    width: 100%;
+
+    margin-top: 20px;
+
+    padding: 12px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background-color: #2563eb;
+
+    color: white;
+
+    cursor: pointer;
+}
+
+.resend-otp-button {
+
+    width: 100%;
+
+    margin-top: 10px;
+
+    padding: 12px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background-color: #475569;
+
+    color: white;
+
+    cursor: pointer;
+}
+
+.verify-otp-error {
+
+    color: red;
+
+    margin-top: 10px;
+}
+
+.verify-otp-success {
+
+    color: green;
+
+    margin-top: 10px;
+}
