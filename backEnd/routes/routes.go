@@ -27,4 +27,5 @@ func AuthRoutes(router *gin.Engine) {
 	protected.GET("/profile", controllers.GetProfile)
 	protected.POST("/logout", controllers.Logout)
 	protected.GET("/messages/:receiverId",controllers.GetChatHistory,)
+	protected.GET("/conversations",controllers.GetConversations,)
 }
