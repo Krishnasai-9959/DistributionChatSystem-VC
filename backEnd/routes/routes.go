@@ -16,7 +16,7 @@ func AuthRoutes(router *gin.Engine) {
 	router.POST("/forgot-password", controllers.ForgotPassword)
 	router.POST("/verify-otp", controllers.VerifyOTP)
 	router.POST("/resend-otp", controllers.ResendOTP)
-	router.GET("/messages/:receiverId",controllers.GetChatHistory,)
+
 	router.POST("/reset-password", controllers.ResetPassword)
 
 	// Protected routes
@@ -26,4 +26,5 @@ func AuthRoutes(router *gin.Engine) {
 
 	protected.GET("/profile", controllers.GetProfile)
 	protected.POST("/logout", controllers.Logout)
+	protected.GET("/messages/:receiverId",controllers.GetChatHistory,)
 }

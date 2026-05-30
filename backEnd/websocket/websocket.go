@@ -150,7 +150,7 @@ func HandleConnections(c *gin.Context) {
 		fmt.Println(msg)
 		msg.Type = "text"
 		msg.Status = "sent"
-		err = controllers.SaveMessage(msg)
+		err = controllers.SaveMessage(&msg)
 
 		if err != nil {
 

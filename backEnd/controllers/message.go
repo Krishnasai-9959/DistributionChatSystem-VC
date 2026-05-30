@@ -13,26 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
-
-
-package controllers
-
-import (
-	"backEnd/database"
-	"backEnd/models"
-	"backEnd/utils"
-	"context"
-	"fmt"
-	"net/http"
-	"strings"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/bson"
-)
-
 func GetChatHistory(c *gin.Context) {
 	// GET AUTHORIZATION HEADER
 
@@ -112,10 +95,44 @@ func GetChatHistory(c *gin.Context) {
 
 	defer cancel()
 
+	page:=1
+	limit:=20
+
+	if p := c.Query("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+		if page < 1 {
+			page = 1
+		}
+	}
+	skip := (page - 1) * limit
+	totlmessages, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to count messages",
+		})
+		return
+	}
+	findOptions := options.Find()
+
+	findOptions.SetSort(
+		bson.D{
+			{
+				Key:   "created_at",
+				Value: 1,
+			},
+		},
+	)
+
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(limit))
+
 	cursor, err := collection.Find(
 		ctx,
 		filter,
+		findOptions,
 	)
+
+	
 
 	if err != nil {
 
@@ -143,11 +160,14 @@ func GetChatHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"messages": messages,
-	})
+    "messages": messages,
+    "page":     page,
+    "limit":    limit,
+    "total":    totlmessages,
+})
 }
 
-func SaveMessage(msg models.Message) error {
+func SaveMessage(msg *models.Message) error {
 
 	collection := database.DB.Collection("messages")
 
@@ -159,10 +179,18 @@ func SaveMessage(msg models.Message) error {
 
 	msg.CreatedAt = time.Now()
 
-	_, err := collection.InsertOne(
+	result, err := collection.InsertOne(
 		ctx,
 		msg,
 	)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	if objectID, ok := result.InsertedID.(primitive.ObjectID); ok {
+		msg.ID = objectID
+	}
+
+	return nil
 }
