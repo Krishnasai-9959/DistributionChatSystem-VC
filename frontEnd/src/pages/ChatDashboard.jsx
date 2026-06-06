@@ -7,21 +7,48 @@ import "./ChatDashboard.css";
 
 function ChatDashboard() {
 
-    const [selectedUser, setSelectedUser] =
-        useState(null);
+    const [
+        selectedUser,
+        setSelectedUser
+    ] = useState(null);
+
+    const [
+        refreshConversations,
+        setRefreshConversations
+    ] = useState(0);
+
+    const triggerConversationRefresh =
+        () => {
+
+        setRefreshConversations(
+            prev => prev + 1
+        );
+    };
 
     return (
+
         <div className="chat-dashboard-page">
 
             <ChatSidebar
-                onUserSelect={setSelectedUser}
+                onUserSelect={
+                    setSelectedUser
+                }
+                refreshTrigger={
+                    refreshConversations
+                }
             />
 
             <ChatArea
-                selectedUser={selectedUser}
+                selectedUser={
+                    selectedUser
+                }
+                onMessageSent={
+                    triggerConversationRefresh
+                }
             />
 
         </div>
+
     );
 }
 

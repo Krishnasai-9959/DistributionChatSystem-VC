@@ -1,24 +1,51 @@
 import "./ConversationItem.css";
 
 function ConversationItem({
-    conversation
+    conversation,
+    onClick
 }) {
+
+    const formatTime =
+        (timestamp) => {
+
+        if (!timestamp)
+            return "";
+
+        return new Date(
+            timestamp
+        ).toLocaleTimeString(
+            [],
+            {
+                hour: "2-digit",
+                minute: "2-digit"
+            }
+        );
+    };
 
     return (
 
-        <div className="conversation-item">
+        <div
+            className="conversation-item"
+            onClick={() =>
+                onClick?.(
+                    conversation
+                )
+            }
+        >
 
             <div className="conversation-header">
 
                 <span>
-                    {conversation.username}
+                    {
+                        conversation.username
+                    }
                 </span>
 
                 <span>
                     {
-                        new Date(
+                        formatTime(
                             conversation.last_message_time
-                        ).toLocaleTimeString()
+                        )
                     }
                 </span>
 
@@ -26,7 +53,9 @@ function ConversationItem({
 
             <div className="conversation-message">
 
-                {conversation.last_message}
+                {
+                    conversation.last_message
+                }
 
             </div>
 
@@ -40,6 +69,7 @@ function ConversationItem({
                         }
 
                     </div>
+
                 )
             }
 

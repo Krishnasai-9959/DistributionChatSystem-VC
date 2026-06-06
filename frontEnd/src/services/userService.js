@@ -24,3 +24,25 @@ export const searchUsers =
 
     return response.data;
 };
+
+export const getUserStatus =
+async (userId) => {
+
+    const token =
+        localStorage.getItem(
+            "access_token"
+        );
+
+    const response =
+        await axios.get(
+            `http://localhost:8080/api/users/status/${userId}`,
+            {
+                headers: {
+                    Authorization:
+                        `Bearer ${token}`
+                }
+            }
+        );
+
+    return response.data;
+};

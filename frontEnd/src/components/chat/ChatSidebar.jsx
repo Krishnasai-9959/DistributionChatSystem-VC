@@ -1,23 +1,32 @@
+import {
+    useEffect,
+    useState
+} from "react";
 
-import { useEffect, useState } from "react";
+import {
+    useNavigate
+} from "react-router-dom";
 
-import { getConversations }
-from "../../services/chatService";
+import {
+    getConversations
+} from "../../services/chatService";
 
-import { searchUsers }
-from "../../services/userService";
+import {
+    searchUsers
+} from "../../services/userService";
 
-import ConversationItem
-from "./ConversationItem";
-
-import SearchUserItem
-from "./SearchUserItem";
+import ConversationItem from "./ConversationItem";
+import SearchUserItem from "./SearchUserItem";
 
 import "./ChatSidebar.css";
 
 function ChatSidebar({
-    onUserSelect
+    onUserSelect,
+    refreshTrigger
 }) {
+
+    const navigate =
+        useNavigate();
 
     const [conversations, setConversations] =
         useState([]);
@@ -29,17 +38,17 @@ function ChatSidebar({
         useState([]);
 
     useEffect(() => {
+
         loadConversations();
-    }, []);
+
+    }, [refreshTrigger]);
 
     useEffect(() => {
 
         const timeout =
             setTimeout(() => {
 
-                if (
-                    !searchQuery.trim()
-                ) {
+                if (!searchQuery.trim()) {
 
                     setSearchResults([]);
 
@@ -63,13 +72,29 @@ function ChatSidebar({
             const response =
                 await getConversations();
 
+            const sortedConversations =
+                (
+                    response.conversations || []
+                ).sort(
+                    (a, b) =>
+                        new Date(
+                            b.last_message_time
+                        ) -
+                        new Date(
+                            a.last_message_time
+                        )
+                );
+
             setConversations(
-                response.conversations || []
+                sortedConversations
             );
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Failed to load conversations:",
+                error
+            );
         }
     };
 
@@ -89,17 +114,15 @@ function ChatSidebar({
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Search failed:",
+                error
+            );
         }
     };
 
     const handleUserClick =
         (user) => {
-
-        console.log(
-            "Selected User:",
-            user
-        );
 
         onUserSelect(user);
 
@@ -108,12 +131,56 @@ function ChatSidebar({
         setSearchResults([]);
     };
 
+    const handleConversationClick =
+        (conversation) => {
+
+        onUserSelect({
+
+            id:
+                conversation.user_id,
+
+            username:
+                conversation.username,
+        });
+    };
+
+    const handleLogout =
+        () => {
+
+        localStorage.removeItem(
+            "access_token"
+        );
+
+        localStorage.removeItem(
+            "refresh_token"
+        );
+
+        localStorage.removeItem(
+            "user"
+        );
+
+        navigate("/login");
+    };
+
     return (
 
         <div className="chat-sidebar">
 
             <div className="chat-sidebar-header">
-                RNA
+
+                <span>
+                    RNA
+                </span>
+
+                <button
+                    className="logout-button"
+                    onClick={
+                        handleLogout
+                    }
+                >
+                    Logout
+                </button>
+
             </div>
 
             <div className="chat-sidebar-search">
@@ -159,18 +226,32 @@ function ChatSidebar({
             <div className="chat-sidebar-conversations">
 
                 {
-                    conversations.map(
-                        (conversation) => (
+                    conversations.length === 0 ? (
 
-                            <ConversationItem
-                                key={
-                                    conversation.user_id
-                                }
-                                conversation={
-                                    conversation
-                                }
-                            />
+                        <div className="empty-conversations">
 
+                            No conversations yet
+
+                        </div>
+
+                    ) : (
+
+                        conversations.map(
+                            (conversation) => (
+
+                                <ConversationItem
+                                    key={
+                                        conversation.user_id
+                                    }
+                                    conversation={
+                                        conversation
+                                    }
+                                    onClick={
+                                        handleConversationClick
+                                    }
+                                />
+
+                            )
                         )
                     )
                 }

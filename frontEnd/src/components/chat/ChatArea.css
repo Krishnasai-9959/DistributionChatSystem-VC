@@ -153,3 +153,12 @@
 
     background: #1d4ed8;
 }
+
+.no-messages {
+
+    margin: auto;
+
+    color: #64748b;
+
+    font-size: 14px;
+}

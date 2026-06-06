@@ -44,3 +44,42 @@
 
     overflow-y: auto;
 }
+
+.chat-sidebar-header {
+
+    padding: 20px;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+
+    font-size: 24px;
+
+    font-weight: 700;
+
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.logout-button {
+
+    padding: 8px 14px;
+
+    border: none;
+
+    border-radius: 8px;
+
+    background: #ef4444;
+
+    color: white;
+
+    cursor: pointer;
+
+    font-size: 13px;
+}
+
+.logout-button:hover {
+
+    background: #dc2626;
+}

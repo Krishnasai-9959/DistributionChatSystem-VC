@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -103,6 +104,19 @@ func HandleConnections(c *gin.Context) {
 
 	mutex.Lock()
 	clients[userID] = ws
+	err = database.RedisClient.Set(
+	database.Ctx,
+	"online:"+userID,
+	"true",
+	0,
+).Err()
+
+if err != nil {
+	fmt.Println(
+		"Redis online status error:",
+		err,
+	)
+}
 	mutex.Unlock()
 
 	fmt.Println("User connected:", userID)
@@ -121,6 +135,18 @@ func HandleConnections(c *gin.Context) {
 
 			mutex.Lock()
 			delete(clients, userID)
+
+database.RedisClient.Del(
+	database.Ctx,
+	"online:"+userID,
+)
+
+database.RedisClient.Set(
+	database.Ctx,
+	"last_seen:"+userID,
+	time.Now().Unix(),
+	0,
+)
 			mutex.Unlock()
 
 			break

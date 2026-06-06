@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func GetConversations(c *gin.Context) {
 
 	userID := c.GetString("user_id")
 
-	collection := database.DB.Collection("messages")
+	messageCollection := database.DB.Collection("messages")
+	userCollection := database.DB.Collection("users")
 
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -25,12 +28,16 @@ func GetConversations(c *gin.Context) {
 
 	filter := bson.M{
 		"$or": []bson.M{
-			{"sender_id": userID},
-			{"receiver_id": userID},
+			{
+				"sender_id": userID,
+			},
+			{
+				"receiver_id": userID,
+			},
 		},
 	}
 
-	cursor, err := collection.Find(
+	cursor, err := messageCollection.Find(
 		ctx,
 		filter,
 	)
@@ -60,39 +67,88 @@ func GetConversations(c *gin.Context) {
 		return
 	}
 
-	conversationMap := make(map[string]models.Conversation)
+	conversationMap :=
+		make(map[string]models.Conversation)
 
 	for _, msg := range messages {
 
 		partnerID := msg.SenderID
 
 		if msg.SenderID == userID {
+
 			partnerID = msg.ReceiverID
 		}
 
-		existing, found := conversationMap[partnerID]
+		existingConversation,
+			exists :=
+			conversationMap[partnerID]
 
-		if !found || msg.CreatedAt.After(existing.LastMessageTime) {
+		if exists &&
+			!msg.CreatedAt.After(
+				existingConversation.LastMessageTime,
+			) {
 
-			conversationMap[partnerID] = models.Conversation{
-				UserID:          partnerID,
-				LastMessage:     msg.Content,
-				LastMessageTime: msg.CreatedAt,
-				UnreadCount:     0,
+			continue
+		}
+
+		username := "Unknown User"
+
+		objectID, err :=
+			primitive.ObjectIDFromHex(
+				partnerID,
+			)
+
+		if err == nil {
+
+			var user models.User
+
+			err = userCollection.FindOne(
+				ctx,
+				bson.M{
+					"_id": objectID,
+				},
+			).Decode(&user)
+
+			if err == nil {
+
+				username =
+					user.Username
 			}
 		}
+
+		conversationMap[partnerID] =
+			models.Conversation{
+
+				UserID: partnerID,
+
+				Username: username,
+
+				LastMessage:
+					msg.Content,
+
+				LastMessageTime:
+					msg.CreatedAt,
+
+				UnreadCount: 0,
+			}
 	}
 
 	var conversations []models.Conversation
 
-	for _, conv := range conversationMap {
-		conversations = append(
-			conversations,
-			conv,
-		)
+	for _, conversation :=
+		range conversationMap {
+
+		conversations =
+			append(
+				conversations,
+				conversation,
+			)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"conversations": conversations,
-	})
+	c.JSON(
+		http.StatusOK,
+		gin.H{
+			"conversations": conversations,
+		},
+	)
 }
