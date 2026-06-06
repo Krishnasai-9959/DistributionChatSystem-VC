@@ -1,17 +1,14 @@
 package websocket
 
 import (
+	"backEnd/controllers"
+	"backEnd/database"
 	"backEnd/models"
-	"backEnd/utils"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 
-	"backEnd/controllers"
-
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -21,6 +18,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 
 		return true
+
 		// origin := r.Header.Get("Origin")
 
 		// allowedOrigins := map[string]bool{
@@ -45,63 +43,45 @@ var broadcast = make(chan models.Message)
 
 // Handle websocket connections
 func HandleConnections(c *gin.Context) {
-	// GET AUTHORIZATION HEADER
 
-	authHeader := c.GetHeader("Authorization")
+	// GET SOCKET TOKEN
 
-	if authHeader == "" {
+	socketToken := c.Query("socket_token")
 
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authorization header missing",
-		})
-
-		return
-	}
-	// SPLIT BEARER TOKEN
-
-	tokenParts := strings.Split(authHeader, " ")
-
-	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+	if socketToken == "" {
 
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid authorization format",
+			"error": "Socket token missing",
 		})
 
 		return
 	}
 
-	tokenString := tokenParts[1]
-	// VALIDATE JWT
+	// VERIFY SOCKET TOKEN IN REDIS
 
-	token, err := utils.ValidateAccessToken(tokenString)
+	userID, err := database.RedisClient.Get(
+		database.Ctx,
+		"socket:"+socketToken,
+	).Result()
 
-	if err != nil || !token.Valid {
-
-		fmt.Println("Token validation error:", err)
+	if err != nil {
 
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid or expired token",
+			"error": "Invalid or expired socket token",
 		})
 
 		return
 	}
-	// EXTRACT CLAIMS
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	// OPTIONAL: ONE-TIME USE TOKEN
 
-	if !ok {
-
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid token claims",
-		})
-
-		return
-	}
-	// EXTRACT AUTHENTICATED USER
-
-	userID := fmt.Sprintf("%v", claims["user_id"])
+	database.RedisClient.Del(
+		database.Ctx,
+		"socket:"+socketToken,
+	)
 
 	fmt.Println("Authenticated websocket user:", userID)
+
 	// UPGRADE HTTP -> WEBSOCKET
 
 	ws, err := upgrader.Upgrade(
@@ -111,11 +91,16 @@ func HandleConnections(c *gin.Context) {
 	)
 
 	if err != nil {
+
 		fmt.Println("Upgrade error:", err)
+
 		return
 	}
+
 	defer ws.Close()
+
 	// REGISTER USER CONNECTION
+
 	mutex.Lock()
 	clients[userID] = ws
 	mutex.Unlock()
@@ -148,8 +133,10 @@ func HandleConnections(c *gin.Context) {
 
 		fmt.Println("Message received:")
 		fmt.Println(msg)
+
 		msg.Type = "text"
 		msg.Status = "sent"
+
 		err = controllers.SaveMessage(&msg)
 
 		if err != nil {
@@ -158,6 +145,7 @@ func HandleConnections(c *gin.Context) {
 		}
 
 		// send to private router
+
 		broadcast <- msg
 	}
 }

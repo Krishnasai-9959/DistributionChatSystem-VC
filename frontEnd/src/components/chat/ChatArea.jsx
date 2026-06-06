@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
-import { getChatHistory } from "../../services/chatService";
+import { useEffect, useRef, useState } from "react";
+
+import {
+    getChatHistory,
+    getSocketToken
+} from "../../services/chatService";
 
 import "./ChatArea.css";
 
@@ -11,15 +15,108 @@ function ChatArea({ selectedUser }) {
     const [newMessage, setNewMessage] =
         useState("");
 
+    const socketRef =
+        useRef(null);
+
+    const currentUser =
+        JSON.parse(
+            localStorage.getItem("user")
+        );
+
+    // Load chat history when user changes
     useEffect(() => {
 
-        if (!selectedUser) return;
+        if (!selectedUser)
+            return;
 
         loadMessages();
 
     }, [selectedUser]);
 
-    const loadMessages = async () => {
+    // Connect websocket once
+    useEffect(() => {
+
+        connectSocket();
+
+        return () => {
+
+            if (
+                socketRef.current
+            ) {
+
+                socketRef.current.close();
+            }
+        };
+
+    }, []);
+
+    const connectSocket =
+        async () => {
+
+        try {
+
+            const response =
+                await getSocketToken();
+
+            const socket =
+                new WebSocket(
+                    `ws://localhost:8080/ws?socket_token=${response.socket_token}`
+                );
+
+            socketRef.current =
+                socket;
+
+            socket.onopen = () => {
+
+                console.log(
+                    "WebSocket Connected"
+                );
+            };
+
+            socket.onmessage =
+                (event) => {
+
+                const message =
+                    JSON.parse(
+                        event.data
+                    );
+
+                setMessages(
+                    (prev) => [
+                        ...prev,
+                        message
+                    ]
+                );
+            };
+
+            socket.onerror =
+                (error) => {
+
+                console.error(
+                    "WebSocket Error:",
+                    error
+                );
+            };
+
+            socket.onclose =
+                () => {
+
+                console.log(
+                    "WebSocket Closed"
+                );
+            };
+
+        } catch (error) {
+
+            console.error(
+                "Failed to connect WebSocket:",
+                error
+            );
+        }
+    };
+
+    const loadMessages =
+        async () => {
 
         try {
 
@@ -34,27 +131,50 @@ function ChatArea({ selectedUser }) {
 
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Failed to load messages:",
+                error
+            );
         }
     };
 
     const handleSend = () => {
 
-        if (!newMessage.trim())
+        if (
+            !newMessage.trim() ||
+            !selectedUser
+        ) {
             return;
+        }
 
-        console.log(
-            "Sending:",
-            newMessage
+        const message = {
+
+            receiver_id:
+                selectedUser.id,
+
+            content:
+                newMessage
+        };
+
+        // Send via websocket
+        socketRef.current?.send(
+            JSON.stringify(
+                message
+            )
         );
 
+        // Instant UI update
         setMessages(
-            prev => [
+            (prev) => [
                 ...prev,
                 {
                     id: Date.now(),
-                    content: newMessage,
-                    sender_id: "me"
+                    sender_id:
+                        currentUser.id,
+                    receiver_id:
+                        selectedUser.id,
+                    content:
+                        newMessage
                 }
             ]
         );
@@ -86,7 +206,9 @@ function ChatArea({ selectedUser }) {
             <div className="chat-header">
 
                 <h3>
-                    {selectedUser.username}
+                    {
+                        selectedUser.username
+                    }
                 </h3>
 
             </div>
@@ -109,15 +231,20 @@ function ChatArea({ selectedUser }) {
                             (message) => (
 
                                 <div
-                                    key={message.id}
+                                    key={
+                                        message.id ||
+                                        Math.random()
+                                    }
                                     className={
-                                        message.sender_id === "me"
+                                        message.sender_id === currentUser.id
                                             ? "message message-sent"
                                             : "message message-received"
                                     }
                                 >
 
-                                    {message.content}
+                                    {
+                                        message.content
+                                    }
 
                                 </div>
 
@@ -161,6 +288,7 @@ function ChatArea({ selectedUser }) {
             </div>
 
         </div>
+
     );
 }
 
