@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import ChatSidebar from "../components/chat/ChatSidebar";
 import ChatArea from "../components/chat/ChatArea";
 
@@ -5,16 +7,21 @@ import "./ChatDashboard.css";
 
 function ChatDashboard() {
 
-    return (
+    const [selectedUser, setSelectedUser] =
+        useState(null);
 
+    return (
         <div className="chat-dashboard-page">
 
-            <ChatSidebar />
+            <ChatSidebar
+                onUserSelect={setSelectedUser}
+            />
 
-            <ChatArea />
+            <ChatArea
+                selectedUser={selectedUser}
+            />
 
         </div>
-
     );
 }
 
