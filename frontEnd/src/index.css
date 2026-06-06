@@ -1,1 +1,42 @@
 @import "tailwindcss";
+
+:root {
+
+    --bg-color: #f5f7fb;
+
+    --card-bg: #ffffff;
+
+    --text-color: #0f172a;
+
+    --secondary-text: #64748b;
+
+    --border-color: #e2e8f0;
+}
+
+body[data-theme="dark"] {
+
+    --bg-color: #0f172a;
+
+    --card-bg: #1e293b;
+
+    --text-color: #f8fafc;
+
+    --secondary-text: #94a3b8;
+
+    --border-color: #334155;
+}
+
+body {
+
+    margin: 0;
+
+    background:
+        var(--bg-color);
+
+    color:
+        var(--text-color);
+
+    transition:
+        background 0.3s ease,
+        color 0.3s ease;
+}

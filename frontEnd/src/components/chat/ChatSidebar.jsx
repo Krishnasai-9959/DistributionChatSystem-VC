@@ -1,23 +1,74 @@
-import { useEffect, useState } from "react";
 
-import { getConversations }
+
+import { useEffect, useState }
+from "react";
+
+import {
+    getConversations
+}
 from "../../services/chatService";
+
+import {
+    searchUsers
+}
+from "../../services/userService";
 
 import ConversationItem
 from "./ConversationItem";
+
+import SearchUserItem
+from "./SearchUserItem";
 
 import "./ChatSidebar.css";
 
 function ChatSidebar() {
 
-    const [conversations, setConversations] =
-        useState([]);
+    const [
+        conversations,
+        setConversations
+    ] = useState([]);
+
+    const [
+        searchQuery,
+        setSearchQuery
+    ] = useState("");
+
+    const [
+        searchResults,
+        setSearchResults
+    ] = useState([]);
 
     useEffect(() => {
 
         loadConversations();
 
     }, []);
+
+    useEffect(() => {
+
+        const timeout = setTimeout(
+            () => {
+
+                if (
+                    searchQuery.trim()
+                        .length === 0
+                ) {
+
+                    setSearchResults([]);
+
+                    return;
+                }
+
+                handleSearch();
+
+            },
+            300
+        );
+
+        return () =>
+            clearTimeout(timeout);
+
+    }, [searchQuery]);
 
     const loadConversations =
         async () => {
@@ -37,6 +88,39 @@ function ChatSidebar() {
         }
     };
 
+    const handleSearch =
+        async () => {
+
+        try {
+
+            const response =
+                await searchUsers(
+                    searchQuery
+                );
+
+            setSearchResults(
+                response.users || []
+            );
+
+        } catch (error) {
+
+            console.error(error);
+        }
+    };
+
+    const handleUserClick =
+        (user) => {
+
+        console.log(
+            "Selected User:",
+            user
+        );
+
+        setSearchQuery("");
+
+        setSearchResults([]);
+    };
+
     return (
 
         <div className="chat-sidebar">
@@ -51,16 +135,64 @@ function ChatSidebar() {
 
                 <input
                     type="text"
-                    placeholder="Search users..."
+                    placeholder=
+                    "Search users..."
+                    value={
+                        searchQuery
+                    }
+                    onChange={
+                        (event) =>
+                            setSearchQuery(
+                                event.target.value
+                            )
+                    }
                 />
 
             </div>
 
-            <div className="chat-sidebar-conversations">
+            {
+
+                searchResults.length >
+                0 && (
+
+                    <div
+                        className=
+                        "search-results"
+                    >
+
+                        {
+                            searchResults.map(
+                                (user) => (
+
+                                    <SearchUserItem
+                                        key={
+                                            user.id
+                                        }
+                                        user={
+                                            user
+                                        }
+                                        onClick={
+                                            handleUserClick
+                                        }
+                                    />
+                                )
+                            )
+                        }
+
+                    </div>
+                )
+            }
+
+            <div
+                className=
+                "chat-sidebar-conversations"
+            >
 
                 {
                     conversations.map(
-                        (conversation) => (
+                        (
+                            conversation
+                        ) => (
 
                             <ConversationItem
                                 key={
@@ -70,7 +202,6 @@ function ChatSidebar() {
                                     conversation
                                 }
                             />
-
                         )
                     )
                 }
