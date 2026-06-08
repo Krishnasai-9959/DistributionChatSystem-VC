@@ -491,8 +491,13 @@ function ChatArea({
             const response = await getSocketToken();
             const token = response.token || response.socket_token;
 
+            const WS_URL =
+                import.meta.env.VITE_API_URL
+                    .replace("https://", "wss://")
+                    .replace("http://", "ws://");
+
             const socket = new WebSocket(
-                `ws://localhost:8080/ws?socket_token=${token}`
+                `${WS_URL}/ws?socket_token=${token}`
             );
 
             socketRef.current = socket;

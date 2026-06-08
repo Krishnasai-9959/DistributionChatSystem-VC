@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const BASE_URL =
-    "http://localhost:8080";
+    import.meta.env.VITE_API_URL;
 
 export const searchUsers =
     async (query) => {
@@ -35,7 +35,7 @@ async (userId) => {
 
     const response =
         await axios.get(
-            `http://localhost:8080/api/users/status/${userId}`,
+            `${BASE_URL}/api/users/status/${userId}`,
             {
                 headers: {
                     Authorization:

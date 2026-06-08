@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const BASE_URL =
-    "http://localhost:8080";
+    import.meta.env.VITE_API_URL;
 
 export const loginUser = async (
     loginData

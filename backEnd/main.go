@@ -14,10 +14,8 @@ import (
 
 func main() {
 
-	err := godotenv.Load()
-
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env not found, using environment variables")
 	}
 
 	database.ConnectDB()
@@ -27,6 +25,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:5173",
+			"https://YOUR-VERCEL-APP.vercel.app",
 		},
 
 		AllowMethods: []string{
