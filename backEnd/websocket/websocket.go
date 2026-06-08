@@ -15,22 +15,8 @@ import (
 
 // WebSocket upgrader
 var upgrader = websocket.Upgrader{
-
 	CheckOrigin: func(r *http.Request) bool {
-
 		return true
-
-		// origin := r.Header.Get("Origin")
-
-		// allowedOrigins := map[string]bool{
-
-		// 	"http://localhost:3000": true,
-		// 	"http://localhost:5173": true,
-
-		// 	"https://yourfrontend.com": true,
-		// }
-
-		// return allowedOrigins[origin]
 	},
 }
 
@@ -39,13 +25,13 @@ var clients = make(map[string]*websocket.Conn)
 
 var mutex sync.Mutex
 
-// private message channel
+// channels
 var broadcast = make(chan models.Message)
+
+var callBroadcast = make(chan models.CallSignal)
 
 // Handle websocket connections
 func HandleConnections(c *gin.Context) {
-
-	// GET SOCKET TOKEN
 
 	socketToken := c.Query("socket_token")
 
@@ -58,8 +44,7 @@ func HandleConnections(c *gin.Context) {
 		return
 	}
 
-	// VERIFY SOCKET TOKEN IN REDIS
-
+	// Verify socket token
 	userID, err := database.RedisClient.Get(
 		database.Ctx,
 		"socket:"+socketToken,
@@ -74,17 +59,18 @@ func HandleConnections(c *gin.Context) {
 		return
 	}
 
-	// OPTIONAL: ONE-TIME USE TOKEN
-
+	// Optional one-time use token
 	database.RedisClient.Del(
 		database.Ctx,
 		"socket:"+socketToken,
 	)
 
-	fmt.Println("Authenticated websocket user:", userID)
+	fmt.Println(
+		"Authenticated websocket user:",
+		userID,
+	)
 
-	// UPGRADE HTTP -> WEBSOCKET
-
+	// Upgrade HTTP -> WebSocket
 	ws, err := upgrader.Upgrade(
 		c.Writer,
 		c.Request,
@@ -93,101 +79,164 @@ func HandleConnections(c *gin.Context) {
 
 	if err != nil {
 
-		fmt.Println("Upgrade error:", err)
+		fmt.Println(
+			"Upgrade error:",
+			err,
+		)
 
 		return
 	}
 
 	defer ws.Close()
 
-	// REGISTER USER CONNECTION
-
+	// Register connection
 	mutex.Lock()
-	clients[userID] = ws
-	err = database.RedisClient.Set(
-	database.Ctx,
-	"online:"+userID,
-	"true",
-	0,
-).Err()
 
-if err != nil {
-	fmt.Println(
-		"Redis online status error:",
-		err,
-	)
-}
+	clients[userID] = ws
+
+	err = database.RedisClient.Set(
+		database.Ctx,
+		"online:"+userID,
+		"true",
+		0,
+	).Err()
+
+	if err != nil {
+
+		fmt.Println(
+			"Redis online status error:",
+			err,
+		)
+	}
+
 	mutex.Unlock()
 
-	fmt.Println("User connected:", userID)
+	fmt.Println(
+		"User connected:",
+		userID,
+	)
 
-	// LISTEN FOR MESSAGES
-
+	// Listen for socket events
 	for {
 
-		var msg models.Message
+		var payload models.SocketPayload
 
-		err := ws.ReadJSON(&msg)
+		err := ws.ReadJSON(&payload)
 
 		if err != nil {
 
-			fmt.Println("Read error:", err)
+			fmt.Println(
+				"Read error:",
+				err,
+			)
 
 			mutex.Lock()
-			delete(clients, userID)
 
-database.RedisClient.Del(
-	database.Ctx,
-	"online:"+userID,
-)
+			delete(
+				clients,
+				userID,
+			)
 
-database.RedisClient.Set(
-	database.Ctx,
-	"last_seen:"+userID,
-	time.Now().Unix(),
-	0,
-)
+			database.RedisClient.Del(
+				database.Ctx,
+				"online:"+userID,
+			)
+
+			database.RedisClient.Set(
+				database.Ctx,
+				"last_seen:"+userID,
+				time.Now().Unix(),
+				0,
+			)
+
 			mutex.Unlock()
 
 			break
 		}
 
-		// NEVER trust sender_id from frontend
-		// Always enforce authenticated sender
+		// Never trust sender from frontend
+		payload.SenderID = userID
 
-		msg.SenderID = userID
+		switch payload.Type {
 
-		fmt.Println("Message received:")
-		fmt.Println(msg)
+		case "message":
 
-		msg.Type = "text"
-		msg.Status = "sent"
+			msg := models.Message{
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Content:    payload.Content,
+				Type:       "text",
+				Status:     "sent",
+			}
 
-		err = controllers.SaveMessage(&msg)
+			err = controllers.SaveMessage(
+				&msg,
+			)
 
-		if err != nil {
+			if err != nil {
 
-			fmt.Println("Message save error:", err)
+				fmt.Println(
+					"Message save error:",
+					err,
+				)
+			}
+
+			broadcast <- msg
+
+		case "offer":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "offer",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Data:       payload.Data,
+			}
+
+		case "answer":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "answer",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Data:       payload.Data,
+			}
+
+		case "candidate":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "candidate",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Data:       payload.Data,
+			}
+
+		case "call-ended":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "call-ended",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+			}
 		}
-
-		// send to private router
-
-		broadcast <- msg
 	}
 }
 
-// Handle private message routing
+// Chat message router
 func HandleMessages() {
 
 	for {
 
 		msg := <-broadcast
 
-		fmt.Println("Routing message to:", msg.ReceiverID)
+		fmt.Println(
+			"Routing message to:",
+			msg.ReceiverID,
+		)
 
 		mutex.Lock()
 
-		receiverConn, ok := clients[msg.ReceiverID]
+		receiverConn,
+			ok := clients[msg.ReceiverID]
 
 		mutex.Unlock()
 
@@ -197,24 +246,71 @@ func HandleMessages() {
 
 			if err != nil {
 
-				fmt.Println("Write error:", err)
+				fmt.Println(
+					"Write error:",
+					err,
+				)
 
 				receiverConn.Close()
 
 				mutex.Lock()
-				delete(clients, msg.ReceiverID)
+
+				delete(
+					clients,
+					msg.ReceiverID,
+				)
+
 				mutex.Unlock()
 
-				fmt.Println("Removed offline user:", msg.ReceiverID)
+				fmt.Println(
+					"Removed offline user:",
+					msg.ReceiverID,
+				)
 
 			} else {
 
-				fmt.Println("Message delivered successfully")
+				fmt.Println(
+					"Message delivered successfully",
+				)
 			}
 
 		} else {
 
-			fmt.Println("Receiver offline:", msg.ReceiverID)
+			fmt.Println(
+				"Receiver offline:",
+				msg.ReceiverID,
+			)
+		}
+	}
+}
+
+// Voice call signaling router
+func HandleCallSignals() {
+
+	for {
+
+		signal := <-callBroadcast
+
+		mutex.Lock()
+
+		receiverConn,
+			ok := clients[signal.ReceiverID]
+
+		mutex.Unlock()
+
+		if ok {
+
+			err := receiverConn.WriteJSON(
+				signal,
+			)
+
+			if err != nil {
+
+				fmt.Println(
+					"Call signal error:",
+					err,
+				)
+			}
 		}
 	}
 }

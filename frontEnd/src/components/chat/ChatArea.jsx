@@ -10,8 +10,20 @@ import {
 
 import {
     getChatHistory,
-    getSocketToken
+    getSocketToken,
+    getConversations
 } from "../../services/chatService";
+
+import CallButton
+from "../call/CallButton";
+
+import VoiceCall
+from "../call/VoiceCall";
+
+import IncomingCallModal
+from "../call/IncomingCallModal";
+
+import { audioSignal } from "../../utils/audioSignal";
 
 import "./ChatArea.css";
 
@@ -29,54 +41,341 @@ function ChatArea({
     const [newMessage, setNewMessage] =
         useState("");
 
+    const [incomingCall, setIncomingCall] =
+        useState(null);
+
+    const [inCall, setInCall] =
+        useState(false);
+
+    const [callStatus, setCallStatus] =
+        useState(null);
+
+    const [isMuted, setIsMuted] =
+        useState(false);
+
+    const [callDuration, setCallDuration] =
+        useState(0);
+
+    const [callerName, setCallerName] =
+        useState("");
+
     const socketRef =
         useRef(null);
 
     const messagesEndRef =
         useRef(null);
 
+    const peerConnectionRef =
+        useRef(null);
+
+    const localStreamRef =
+        useRef(null);
+
+    const remoteAudioRef =
+        useRef(null);
+
+    const iceCandidatesQueueRef =
+        useRef([]);
+
+    const timerRef =
+        useRef(null);
+
+    const rtcConfig = {
+
+        iceServers: [
+            {
+                urls:
+                    "stun:stun.l.google.com:19302"
+            }
+        ]
+    };
+
     const currentUser =
         JSON.parse(
             localStorage.getItem("user") || "{}"
         );
 
-    useEffect(() => {
+    async function getCallerName(callerId) {
+        if (selectedUser && selectedUser.id === callerId) {
+            return selectedUser.username;
+        }
+        try {
+            const response = await getConversations();
+            const conv = (response.conversations || []).find(c => c.user_id === callerId);
+            if (conv) return conv.username;
+        } catch (e) {
+            console.error("Error fetching caller name:", e);
+        }
+        return `User (${callerId.substring(0, 6)})`;
+    }
 
+    async function processIceQueue() {
+        while (iceCandidatesQueueRef.current.length > 0) {
+            const candidate = iceCandidatesQueueRef.current.shift();
+            try {
+                if (peerConnectionRef.current) {
+                    await peerConnectionRef.current.addIceCandidate(candidate);
+                }
+            } catch (err) {
+                console.error("Error adding queued ICE candidate:", err);
+            }
+        }
+    }
+
+    function endCall(sendSignal = true) {
+        audioSignal.stop();
+
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+
+        if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
+        }
+
+        if (localStreamRef.current) {
+            localStreamRef.current
+                .getTracks()
+                .forEach(track =>
+                    track.stop()
+                );
+            localStreamRef.current = null;
+        }
+
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = null;
+        }
+
+        iceCandidatesQueueRef.current = [];
+
+        const receiverId = selectedUser?.id || (incomingCall ? incomingCall.sender_id : null);
+
+        if (
+            sendSignal &&
+            receiverId &&
+            socketRef.current &&
+            socketRef.current.readyState === WebSocket.OPEN
+        ) {
+
+            socketRef.current.send(
+                JSON.stringify({
+                    type:
+                        "call-ended",
+                    receiver_id: receiverId
+                })
+            );
+        }
+
+        setInCall(false);
+        setIncomingCall(null);
+        setCallStatus(null);
+        setIsMuted(false);
+        setCallDuration(0);
+
+        console.log(
+            "Call Ended"
+        );
+    }
+
+    function rejectCall() {
+        if (!incomingCall) return;
+
+        audioSignal.stop();
+
+        const callerId = incomingCall.sender_id;
+
+        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            socketRef.current.send(
+                JSON.stringify({
+                    type: "call-ended",
+                    receiver_id: callerId
+                })
+            );
+        }
+
+        setIncomingCall(null);
+    }
+
+    async function acceptCall() {
+        if (!incomingCall) return;
+
+        audioSignal.stop();
+
+        const callerId = incomingCall.sender_id;
+        const offer = incomingCall.data;
+
+        try {
+            iceCandidatesQueueRef.current = [];
+            setCallerName(incomingCall.username);
+            setInCall(true);
+            setCallStatus("connected");
+            setIsMuted(false);
+            setCallDuration(0);
+            setIncomingCall(null);
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true
+            });
+            localStreamRef.current = stream;
+
+            const peer = new RTCPeerConnection(rtcConfig);
+            peerConnectionRef.current = peer;
+
+            stream.getTracks().forEach(track => {
+                peer.addTrack(track, stream);
+            });
+
+            peer.onicecandidate = (event) => {
+                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(
+                        JSON.stringify({
+                            type: "candidate",
+                            receiver_id: callerId,
+                            data: event.candidate
+                        })
+                    );
+                }
+            };
+
+            peer.ontrack = (event) => {
+                if (remoteAudioRef.current && event.streams[0]) {
+                    remoteAudioRef.current.srcObject = event.streams[0];
+                }
+            };
+
+            await peer.setRemoteDescription(new RTCSessionDescription(offer));
+            processIceQueue();
+
+            const answer = await peer.createAnswer();
+            await peer.setLocalDescription(answer);
+
+            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                socketRef.current.send(
+                    JSON.stringify({
+                        type: "answer",
+                        receiver_id: callerId,
+                        data: answer
+                    })
+                );
+            }
+
+            console.log("Voice Call Accepted");
+        } catch (error) {
+            console.error("Error accepting call:", error);
+            endCall(false);
+        }
+    }
+
+    async function startVoiceCall() {
         if (!selectedUser)
             return;
 
-        loadMessages();
-        loadUserStatus();
+        try {
+            iceCandidatesQueueRef.current = [];
+            setCallerName(selectedUser.username);
+            setInCall(true);
+            setCallStatus("calling");
+            setIsMuted(false);
+            setCallDuration(0);
 
-    }, [selectedUser]);
+            audioSignal.playDialtone();
 
-    useEffect(() => {
+            const stream =
+                await navigator
+                    .mediaDevices
+                    .getUserMedia({
+                        audio: true
+                    });
 
-        connectSocket();
+            localStreamRef.current =
+                stream;
 
-        return () => {
-            socketRef.current?.close();
-        };
+            const peer =
+                new RTCPeerConnection(
+                    rtcConfig
+                );
 
-    }, []);
+            peerConnectionRef.current =
+                peer;
 
-    useEffect(() => {
+            stream
+                .getTracks()
+                .forEach(track => {
 
-        scrollToBottom();
+                    peer.addTrack(
+                        track,
+                        stream
+                    );
+                });
 
-    }, [messages]);
+            peer.onicecandidate = (event) => {
+                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(
+                        JSON.stringify({
+                            type: "candidate",
+                            receiver_id: selectedUser.id,
+                            data: event.candidate
+                        })
+                    );
+                }
+            };
 
-    const scrollToBottom = () => {
+            peer.ontrack = (event) => {
+                if (remoteAudioRef.current && event.streams[0]) {
+                    remoteAudioRef.current.srcObject = event.streams[0];
+                }
+            };
 
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+
+            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                socketRef.current.send(
+                    JSON.stringify({
+                        type: "offer",
+                        receiver_id: selectedUser.id,
+                        data: offer
+                    })
+                );
+            }
+
+            console.log(
+                "Voice Call Started"
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Voice Call Error:",
+                error
+            );
+            endCall(false);
+        }
+    }
+
+    function toggleMute() {
+        if (localStreamRef.current) {
+            const audioTracks = localStreamRef.current.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const nextMuted = !isMuted;
+                audioTracks.forEach(track => {
+                    track.enabled = !nextMuted;
+                });
+                setIsMuted(nextMuted);
+            }
+        }
+    }
+
+    function scrollToBottom() {
         messagesEndRef.current?.scrollIntoView({
             behavior: "smooth"
         });
-    };
+    }
 
-    const connectSocket = async () => {
-
+    async function connectSocket() {
         try {
-
             const response =
                 await getSocketToken();
 
@@ -85,39 +384,89 @@ function ChatArea({
                 response
             );
 
+            const token = response.token || response.socket_token;
+
             const socket =
                 new WebSocket(
-                    `ws://localhost:8080/ws?socket_token=${response.socket_token}`
+                    `ws://localhost:8080/ws?socket_token=${token}`
                 );
 
             socketRef.current =
                 socket;
 
-            socket.onopen = () => {
+            socket.onopen =
+                () => {
 
                 console.log(
                     "WebSocket Connected"
                 );
             };
 
-            socket.onmessage = (event) => {
+            socket.onmessage =
+                async (event) => {
 
-                const message =
+                const payload =
                     JSON.parse(
                         event.data
                     );
 
+                if (
+                    payload.type === "offer"
+                ) {
+                    audioSignal.playRingtone();
+                    const name = await getCallerName(payload.sender_id);
+                    setIncomingCall({
+                        ...payload,
+                        username: name
+                    });
+                    return;
+                }
+
+                if (
+                    payload.type === "answer"
+                ) {
+                    if (peerConnectionRef.current) {
+                        await peerConnectionRef.current.setRemoteDescription(
+                            new RTCSessionDescription(payload.data)
+                        );
+                        audioSignal.stop();
+                        setCallStatus("connected");
+                        processIceQueue();
+                    }
+                    return;
+                }
+
+                if (
+                    payload.type === "candidate"
+                ) {
+                    const candidate = new RTCIceCandidate(payload.data);
+                    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+                        await peerConnectionRef.current.addIceCandidate(candidate);
+                    } else {
+                        iceCandidatesQueueRef.current.push(candidate);
+                    }
+                    return;
+                }
+
+                if (
+                    payload.type === "call-ended"
+                ) {
+                    endCall(false);
+                    return;
+                }
+
                 setMessages(
                     prev => [
                         ...prev,
-                        message
+                        payload
                     ]
                 );
 
                 onMessageSent?.();
             };
 
-            socket.onerror = (error) => {
+            socket.onerror =
+                (error) => {
 
                 console.error(
                     "WebSocket Error:",
@@ -125,7 +474,8 @@ function ChatArea({
                 );
             };
 
-            socket.onclose = () => {
+            socket.onclose =
+                () => {
 
                 console.log(
                     "WebSocket Closed"
@@ -139,12 +489,10 @@ function ChatArea({
                 error
             );
         }
-    };
+    }
 
-    const loadMessages = async () => {
-
+    async function loadMessages() {
         try {
-
             const response =
                 await getChatHistory(
                     selectedUser.id
@@ -161,15 +509,13 @@ function ChatArea({
                 error
             );
         }
-    };
+    }
 
-    const loadUserStatus = async () => {
-
+    async function loadUserStatus() {
         if (!selectedUser)
             return;
 
         try {
-
             const response =
                 await getUserStatus(
                     selectedUser.id
@@ -186,9 +532,77 @@ function ChatArea({
                 error
             );
         }
-    };
+    }
 
-    const handleSend = () => {
+    useEffect(() => {
+
+        if (!selectedUser)
+            return;
+
+        setTimeout(() => {
+            loadMessages();
+            loadUserStatus();
+        }, 0);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedUser]);
+
+    useEffect(() => {
+
+        setTimeout(() => {
+            connectSocket();
+        }, 0);
+
+        return () => {
+
+            socketRef.current?.close();
+        };
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+
+        scrollToBottom();
+
+    }, [messages]);
+
+    useEffect(() => {
+        if (callStatus === "connected") {
+            timerRef.current = setInterval(() => {
+                setCallDuration(prev => prev + 1);
+            }, 1000);
+        } else {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        }
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+        };
+    }, [callStatus]);
+
+    useEffect(() => {
+        return () => {
+            audioSignal.stop();
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+            if (peerConnectionRef.current) {
+                peerConnectionRef.current.close();
+            }
+            if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
+
+    const handleSend =
+        () => {
 
         if (
             !newMessage.trim() ||
@@ -295,11 +709,16 @@ function ChatArea({
                                 }
 
                             </small>
-
                         )
                     }
 
                 </div>
+
+                <CallButton
+                    onCall={
+                        startVoiceCall
+                    }
+                />
 
             </div>
 
@@ -318,12 +737,12 @@ function ChatArea({
                     ) : (
 
                         messages.map(
-                            (message) => (
+                            (message, idx) => (
 
                                 <div
                                     key={
                                         message.id ||
-                                        Math.random()
+                                        `msg-${idx}`
                                     }
                                     className={
                                         message.sender_id === currentUser.id
@@ -332,7 +751,9 @@ function ChatArea({
                                     }
                                 >
 
-                                    {message.content}
+                                    {
+                                        message.content
+                                    }
 
                                 </div>
 
@@ -346,6 +767,47 @@ function ChatArea({
                 />
 
             </div>
+
+            <IncomingCallModal
+                caller={
+                    incomingCall
+                }
+                onAccept={
+                    acceptCall
+                }
+                onReject={
+                    rejectCall
+                }
+            />
+
+            <VoiceCall
+                inCall={
+                    inCall
+                }
+                onEndCall={
+                    endCall
+                }
+                callStatus={
+                    callStatus
+                }
+                callerName={
+                    callerName
+                }
+                isMuted={
+                    isMuted
+                }
+                onToggleMute={
+                    toggleMute
+                }
+                callDuration={
+                    callDuration
+                }
+            />
+
+            <audio
+                ref={remoteAudioRef}
+                autoPlay
+            />
 
             <div className="chat-input-container">
 

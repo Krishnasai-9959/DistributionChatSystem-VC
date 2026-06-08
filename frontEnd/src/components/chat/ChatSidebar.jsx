@@ -37,38 +37,8 @@ function ChatSidebar({
     const [searchResults, setSearchResults] =
         useState([]);
 
-    useEffect(() => {
-
-        loadConversations();
-
-    }, [refreshTrigger]);
-
-    useEffect(() => {
-
-        const timeout =
-            setTimeout(() => {
-
-                if (!searchQuery.trim()) {
-
-                    setSearchResults([]);
-
-                    return;
-                }
-
-                handleSearch();
-
-            }, 300);
-
-        return () =>
-            clearTimeout(timeout);
-
-    }, [searchQuery]);
-
-    const loadConversations =
-        async () => {
-
+    async function loadConversations() {
         try {
-
             const response =
                 await getConversations();
 
@@ -96,13 +66,10 @@ function ChatSidebar({
                 error
             );
         }
-    };
+    }
 
-    const handleSearch =
-        async () => {
-
+    async function handleSearch() {
         try {
-
             const response =
                 await searchUsers(
                     searchQuery
@@ -119,7 +86,37 @@ function ChatSidebar({
                 error
             );
         }
-    };
+    }
+
+    useEffect(() => {
+
+        setTimeout(() => {
+            loadConversations();
+        }, 0);
+
+    }, [refreshTrigger]);
+
+    useEffect(() => {
+
+        const timeout =
+            setTimeout(() => {
+
+                if (!searchQuery.trim()) {
+
+                    setSearchResults([]);
+
+                    return;
+                }
+
+                handleSearch();
+
+            }, 300);
+
+        return () =>
+            clearTimeout(timeout);
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchQuery]);
 
     const handleUserClick =
         (user) => {

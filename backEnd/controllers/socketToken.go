@@ -48,6 +48,6 @@ func GenerateSocketToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"socket_token": socketToken,
+		"token": socketToken,
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"backEnd/websocket"
 	"log"
 	"os"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -24,30 +25,30 @@ func main() {
 
 	router := gin.Default()
 	router.Use(cors.New(cors.Config{
-    AllowOrigins: []string{
-        "http://localhost:5173",
-    },
+		AllowOrigins: []string{
+			"http://localhost:5173",
+		},
 
-    AllowMethods: []string{
-        "GET",
-        "POST",
-        "PUT",
-        "DELETE",
-        "OPTIONS",
-    },
+		AllowMethods: []string{
+			"GET",
+			"POST",
+			"PUT",
+			"DELETE",
+			"OPTIONS",
+		},
 
-    AllowHeaders: []string{
-        "Origin",
-        "Content-Type",
-        "Authorization",
-    },
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Authorization",
+		},
 
-    ExposeHeaders: []string{
-        "Content-Length",
-    },
+		ExposeHeaders: []string{
+			"Content-Length",
+		},
 
-    AllowCredentials: true,
-}))
+		AllowCredentials: true,
+	}))
 
 	router.GET("/", func(c *gin.Context) {
 
@@ -63,6 +64,7 @@ func main() {
 
 	// start broadcaster
 	go websocket.HandleMessages()
+	go websocket.HandleCallSignals()
 
 	port := os.Getenv("PORT")
 
