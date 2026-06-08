@@ -51,13 +51,7 @@ function ConversationItem({
 
             </div>
 
-            <div className="conversation-message">
 
-                {
-                    conversation.last_message
-                }
-
-            </div>
 
             {
                 conversation.unread_count > 0 && (

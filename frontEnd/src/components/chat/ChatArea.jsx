@@ -28,6 +28,12 @@ from "../call/IncomingCallModal";
 
 import { audioSignal } from "../../utils/audioSignal";
 
+import {
+    encryptMessage,
+    decryptMessage
+}
+from "../../utils/crypto";
+
 import "./ChatArea.css";
 
 function ChatArea({
@@ -596,6 +602,14 @@ function ChatArea({
                     return;
                 }
 
+                if (payload.content) {
+                    try {
+                        payload.content = decryptMessage(payload.content);
+                    } catch (e) {
+                        console.error("Failed to decrypt incoming message:", e);
+                    }
+                }
+
                 setMessages(
                     prev => [
                         ...prev,
@@ -639,9 +653,19 @@ function ChatArea({
                     selectedUser.id
                 );
 
-            setMessages(
-                response.messages || []
-            );
+            const decryptedMessages = (response.messages || []).map(msg => {
+                try {
+                    return {
+                        ...msg,
+                        content: msg.content ? decryptMessage(msg.content) : msg.content
+                    };
+                } catch (e) {
+                    console.error("Failed to decrypt message in history:", e);
+                    return msg;
+                }
+            });
+
+            setMessages(decryptedMessages);
 
         } catch (error) {
 
@@ -752,13 +776,20 @@ function ChatArea({
             return;
         }
 
+        const encryptedContent =
+            encryptMessage(
+                newMessage.trim()
+            );
+
         const message = {
+
+            type: "message",
 
             receiver_id:
                 selectedUser.id,
 
             content:
-                newMessage
+                encryptedContent
         };
 
         if (
