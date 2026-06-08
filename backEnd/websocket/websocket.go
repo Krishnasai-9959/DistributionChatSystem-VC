@@ -192,10 +192,28 @@ func HandleConnections(c *gin.Context) {
 				Data:       payload.Data,
 			}
 
+		case "video-offer":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "video-offer",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Data:       payload.Data,
+			}
+
 		case "answer":
 
 			callBroadcast <- models.CallSignal{
 				Type:       "answer",
+				SenderID:   userID,
+				ReceiverID: payload.ReceiverID,
+				Data:       payload.Data,
+			}
+
+		case "video-answer":
+
+			callBroadcast <- models.CallSignal{
+				Type:       "video-answer",
 				SenderID:   userID,
 				ReceiverID: payload.ReceiverID,
 				Data:       payload.Data,

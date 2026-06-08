@@ -30,7 +30,9 @@ function IncomingCallModal({
                     {username}
                 </h2>
                 
-                <div className="call-status">Incoming Voice Call...</div>
+                <div className="call-status">
+                    {caller.type === "video-offer" ? "Incoming Video Call..." : "Incoming Voice Call..."}
+                </div>
 
                 <div className="call-controls">
                     <button 

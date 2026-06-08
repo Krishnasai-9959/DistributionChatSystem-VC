@@ -20,6 +20,9 @@ from "../call/CallButton";
 import VoiceCall
 from "../call/VoiceCall";
 
+import VideoCall
+from "../call/VideoCall";
+
 import IncomingCallModal
 from "../call/IncomingCallModal";
 
@@ -58,6 +61,18 @@ function ChatArea({
 
     const [callerName, setCallerName] =
         useState("");
+
+    const [callType, setCallType] =
+        useState(null);
+
+    const [localStream, setLocalStream] =
+        useState(null);
+
+    const [remoteStream, setRemoteStream] =
+        useState(null);
+
+    const [isVideoMuted, setIsVideoMuted] =
+        useState(false);
 
     const socketRef =
         useRef(null);
@@ -172,7 +187,11 @@ function ChatArea({
         setIncomingCall(null);
         setCallStatus(null);
         setIsMuted(false);
+        setIsVideoMuted(false);
         setCallDuration(0);
+        setLocalStream(null);
+        setRemoteStream(null);
+        setCallType(null);
 
         console.log(
             "Call Ended"
@@ -205,6 +224,7 @@ function ChatArea({
 
         const callerId = incomingCall.sender_id;
         const offer = incomingCall.data;
+        const isVideoCallType = incomingCall.type === "video-offer";
 
         try {
             iceCandidatesQueueRef.current = [];
@@ -212,13 +232,17 @@ function ChatArea({
             setInCall(true);
             setCallStatus("connected");
             setIsMuted(false);
+            setIsVideoMuted(false);
             setCallDuration(0);
+            setCallType(isVideoCallType ? "video" : "voice");
             setIncomingCall(null);
 
             const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true
+                audio: true,
+                video: isVideoCallType
             });
             localStreamRef.current = stream;
+            setLocalStream(stream);
 
             const peer = new RTCPeerConnection(rtcConfig);
             peerConnectionRef.current = peer;
@@ -240,8 +264,11 @@ function ChatArea({
             };
 
             peer.ontrack = (event) => {
-                if (remoteAudioRef.current && event.streams[0]) {
-                    remoteAudioRef.current.srcObject = event.streams[0];
+                if (event.streams[0]) {
+                    setRemoteStream(event.streams[0]);
+                    if (remoteAudioRef.current) {
+                        remoteAudioRef.current.srcObject = event.streams[0];
+                    }
                 }
             };
 
@@ -254,7 +281,7 @@ function ChatArea({
             if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
                 socketRef.current.send(
                     JSON.stringify({
-                        type: "answer",
+                        type: isVideoCallType ? "video-answer" : "answer",
                         receiver_id: callerId,
                         data: answer
                     })
@@ -279,6 +306,7 @@ function ChatArea({
             setCallStatus("calling");
             setIsMuted(false);
             setCallDuration(0);
+            setCallType("voice");
 
             audioSignal.playDialtone();
 
@@ -291,6 +319,7 @@ function ChatArea({
 
             localStreamRef.current =
                 stream;
+            setLocalStream(stream);
 
             const peer =
                 new RTCPeerConnection(
@@ -323,8 +352,11 @@ function ChatArea({
             };
 
             peer.ontrack = (event) => {
-                if (remoteAudioRef.current && event.streams[0]) {
-                    remoteAudioRef.current.srcObject = event.streams[0];
+                if (event.streams[0]) {
+                    setRemoteStream(event.streams[0]);
+                    if (remoteAudioRef.current) {
+                        remoteAudioRef.current.srcObject = event.streams[0];
+                    }
                 }
             };
 
@@ -355,6 +387,100 @@ function ChatArea({
         }
     }
 
+    async function startVideoCall() {
+        if (!selectedUser)
+            return;
+
+        try {
+            iceCandidatesQueueRef.current = [];
+            setCallerName(selectedUser.username);
+            setInCall(true);
+            setCallStatus("calling");
+            setIsMuted(false);
+            setIsVideoMuted(false);
+            setCallDuration(0);
+            setCallType("video");
+
+            audioSignal.playDialtone();
+
+            const stream =
+                await navigator
+                    .mediaDevices
+                    .getUserMedia({
+                        audio: true,
+                        video: true
+                    });
+
+            localStreamRef.current =
+                stream;
+            setLocalStream(stream);
+
+            const peer =
+                new RTCPeerConnection(
+                    rtcConfig
+                );
+
+            peerConnectionRef.current =
+                peer;
+
+            stream
+                .getTracks()
+                .forEach(track => {
+
+                    peer.addTrack(
+                        track,
+                        stream
+                    );
+                });
+
+            peer.onicecandidate = (event) => {
+                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(
+                        JSON.stringify({
+                            type: "candidate",
+                            receiver_id: selectedUser.id,
+                            data: event.candidate
+                        })
+                    );
+                }
+            };
+
+            peer.ontrack = (event) => {
+                if (event.streams[0]) {
+                    setRemoteStream(event.streams[0]);
+                    if (remoteAudioRef.current) {
+                        remoteAudioRef.current.srcObject = event.streams[0];
+                    }
+                }
+            };
+
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+
+            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+                socketRef.current.send(
+                    JSON.stringify({
+                        type: "video-offer",
+                        receiver_id: selectedUser.id,
+                        data: offer
+                    })
+                );
+            }
+
+            console.log(
+                "Video Call Started"
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Video Call Error:",
+                error
+            );
+            endCall(false);
+        }
+    }
+
     function toggleMute() {
         if (localStreamRef.current) {
             const audioTracks = localStreamRef.current.getAudioTracks();
@@ -364,6 +490,19 @@ function ChatArea({
                     track.enabled = !nextMuted;
                 });
                 setIsMuted(nextMuted);
+            }
+        }
+    }
+
+    function toggleVideo() {
+        if (localStreamRef.current) {
+            const videoTracks = localStreamRef.current.getVideoTracks();
+            if (videoTracks.length > 0) {
+                const nextMuted = !isVideoMuted;
+                videoTracks.forEach(track => {
+                    track.enabled = !nextMuted;
+                });
+                setIsVideoMuted(nextMuted);
             }
         }
     }
@@ -411,7 +550,8 @@ function ChatArea({
                     );
 
                 if (
-                    payload.type === "offer"
+                    payload.type === "offer" ||
+                    payload.type === "video-offer"
                 ) {
                     audioSignal.playRingtone();
                     const name = await getCallerName(payload.sender_id);
@@ -423,7 +563,8 @@ function ChatArea({
                 }
 
                 if (
-                    payload.type === "answer"
+                    payload.type === "answer" ||
+                    payload.type === "video-answer"
                 ) {
                     if (peerConnectionRef.current) {
                         await peerConnectionRef.current.setRemoteDescription(
@@ -715,9 +856,8 @@ function ChatArea({
                 </div>
 
                 <CallButton
-                    onCall={
-                        startVoiceCall
-                    }
+                    onVoiceCall={startVoiceCall}
+                    onVideoCall={startVideoCall}
                 />
 
             </div>
@@ -780,29 +920,31 @@ function ChatArea({
                 }
             />
 
-            <VoiceCall
-                inCall={
-                    inCall
-                }
-                onEndCall={
-                    endCall
-                }
-                callStatus={
-                    callStatus
-                }
-                callerName={
-                    callerName
-                }
-                isMuted={
-                    isMuted
-                }
-                onToggleMute={
-                    toggleMute
-                }
-                callDuration={
-                    callDuration
-                }
-            />
+            {callType === "video" ? (
+                <VideoCall
+                    inCall={inCall}
+                    onEndCall={endCall}
+                    callStatus={callStatus}
+                    callerName={callerName}
+                    localStream={localStream}
+                    remoteStream={remoteStream}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                    isVideoMuted={isVideoMuted}
+                    onToggleVideo={toggleVideo}
+                    callDuration={callDuration}
+                />
+            ) : (
+                <VoiceCall
+                    inCall={inCall}
+                    onEndCall={endCall}
+                    callStatus={callStatus}
+                    callerName={callerName}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                    callDuration={callDuration}
+                />
+            )}
 
             <audio
                 ref={remoteAudioRef}
