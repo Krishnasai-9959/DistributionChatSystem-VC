@@ -1,21 +1,86 @@
 .register-page {
     min-height: 100vh;
-
     display: flex;
     justify-content: center;
     align-items: center;
-
-    background-color: #f5f7fb;
+    background-color: #f0f9ff;
+    font-family: inherit;
 }
 
 .register-card {
-    width: 500px;
-
+    width: 460px;
     padding: 40px;
-
     border-radius: 16px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
 
-    background-color: white;
+/* Logo and text inside register */
+.register-page .logo-title {
+    color: #0284c7;
+    font-weight: 700;
+}
 
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+.register-page .logo-tagline {
+    color: #64748b !important;
+}
+
+/* Clean form labels and input controls */
+.register-page .input-field-label {
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.register-page .input-field-control {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    border-radius: 8px;
+    padding: 10px 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.register-page .input-field-control:focus {
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+.register-page .input-field-control::placeholder {
+    color: #94a3b8;
+}
+
+.register-page .password-toggle-button {
+    color: #0284c7;
+}
+
+.register-page .password-toggle-button:hover {
+    color: #0369a1;
+}
+
+.register-page .register-button {
+    background-color: #0284c7;
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 12px;
+    color: #ffffff;
+    transition: background-color 0.2s;
+}
+
+.register-page .register-button:hover {
+    background-color: #0369a1;
+}
+
+.register-page .register-error-message {
+    background-color: #fef2f2;
+    border: 1px solid #fee2e2;
+    color: #991b1b;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.85rem;
 }

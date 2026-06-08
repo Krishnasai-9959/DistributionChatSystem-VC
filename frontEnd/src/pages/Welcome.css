@@ -1,48 +1,36 @@
 .welcome-page {
-
     min-height: 100vh;
-
     display: flex;
     justify-content: center;
     align-items: center;
-
-    background-color: #f5f7fb;
+    background-color: #f0f9ff;
+    font-family: inherit;
 }
 
 .welcome-card {
-
-    width: 500px;
-
+    width: 460px;
     padding: 40px;
-
     border-radius: 16px;
-
     text-align: center;
-
-    background-color: white;
-
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
 }
 
 .welcome-title {
-
     margin-top: 20px;
-
     font-size: 2rem;
-
     font-weight: 700;
+    color: #0284c7;
 }
 
 .welcome-message {
-
     margin-top: 10px;
-
     color: #475569;
 }
 
 .welcome-redirect {
-
     margin-top: 20px;
-
-    color: #2563eb;
+    color: #0284c7;
+    font-weight: 500;
 }

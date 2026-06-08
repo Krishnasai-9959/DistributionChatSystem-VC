@@ -30,6 +30,11 @@ function Splash() {
 
             </div>
 
+            <div className="splash-footer">
+                <span className="splash-footer-brand">RNA Messaging System</span>
+                <span className="splash-footer-secure">🔒 End-to-End Encrypted</span>
+            </div>
+
         </div>
     );
 }

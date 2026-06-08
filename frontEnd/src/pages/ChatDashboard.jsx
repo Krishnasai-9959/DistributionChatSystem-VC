@@ -1,54 +1,82 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import ChatSidebar from "../components/chat/ChatSidebar";
 import ChatArea from "../components/chat/ChatArea";
+import ProfileDetailPanel from "../components/chat/ProfileDetailPanel";
 
 import "./ChatDashboard.css";
 
 function ChatDashboard() {
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [selectedUserStatus, setSelectedUserStatus] = useState(null);
+    const [refreshConversations, setRefreshConversations] = useState(0);
+    const [showProfilePanel, setShowProfilePanel] = useState(false);
+    const [currentMessages, setCurrentMessages] = useState([]);
+    const [theme, setTheme] = useState(() => {
+        return localStorage.getItem("theme") || "light";
+    });
 
-    const [
-        selectedUser,
-        setSelectedUser
-    ] = useState(null);
+    // Handle theme side effects
+    useEffect(() => {
+        document.body.setAttribute("data-theme", theme);
+        localStorage.setItem("theme", theme);
+    }, [theme]);
 
-    const [
-        refreshConversations,
-        setRefreshConversations
-    ] = useState(0);
+    // Handle contact photo updates locally to refresh lists
+    useEffect(() => {
+        const handleProfileUpdate = () => {
+            setRefreshConversations(prev => prev + 1);
+        };
+        window.addEventListener("profileUpdate", handleProfileUpdate);
+        return () => window.removeEventListener("profileUpdate", handleProfileUpdate);
+    }, []);
 
-    const triggerConversationRefresh =
-        () => {
+    const toggleTheme = () => {
+        setTheme(prev => (prev === "light" ? "dark" : "light"));
+    };
 
-        setRefreshConversations(
-            prev => prev + 1
-        );
+    const triggerConversationRefresh = () => {
+        setRefreshConversations(prev => prev + 1);
+    };
+
+    const handleUserSelect = (user) => {
+        setSelectedUser(user);
+        setSelectedUserStatus(null); // Reset status when switching users
+        setShowProfilePanel(false); // Close profile panel when switching users
     };
 
     return (
+        <div className={`chat-dashboard-page ${selectedUser ? "chat-selected" : ""} ${showProfilePanel ? "profile-open" : ""}`}>
+            <div className="chat-sidebar-wrapper">
+                <ChatSidebar
+                    onUserSelect={handleUserSelect}
+                    refreshTrigger={refreshConversations}
+                    theme={theme}
+                    onThemeToggle={toggleTheme}
+                    selectedUser={selectedUser}
+                />
+            </div>
 
-        <div className="chat-dashboard-page">
+            <div className="chat-area-wrapper">
+                <ChatArea
+                    selectedUser={selectedUser}
+                    onMessageSent={triggerConversationRefresh}
+                    onMessagesUpdate={setCurrentMessages}
+                    onStatusUpdate={setSelectedUserStatus}
+                    onToggleProfile={() => setShowProfilePanel(prev => !prev)}
+                    onBack={() => setSelectedUser(null)}
+                />
+            </div>
 
-            <ChatSidebar
-                onUserSelect={
-                    setSelectedUser
-                }
-                refreshTrigger={
-                    refreshConversations
-                }
-            />
-
-            <ChatArea
-                selectedUser={
-                    selectedUser
-                }
-                onMessageSent={
-                    triggerConversationRefresh
-                }
-            />
-
+            {showProfilePanel && selectedUser && (
+                <ProfileDetailPanel
+                    user={selectedUser}
+                    userStatus={selectedUserStatus}
+                    messages={currentMessages}
+                    onClose={() => setShowProfilePanel(false)}
+                />
+            )}
         </div>
-
     );
 }
 
