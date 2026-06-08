@@ -84,8 +84,10 @@ func SearchUsers(c *gin.Context) {
 		results = append(
 			results,
 			models.SearchUser{
-				ID:       user.ID.Hex(),
-				Username: user.Username,
+				ID:         user.ID.Hex(),
+				Username:   user.Username,
+				ProfilePic: user.ProfilePic,
+				Bio:        user.Bio,
 			},
 		)
 	}

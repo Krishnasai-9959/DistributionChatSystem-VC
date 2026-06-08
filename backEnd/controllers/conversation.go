@@ -92,6 +92,8 @@ func GetConversations(c *gin.Context) {
 		}
 
 		username := "Unknown User"
+		profilePic := ""
+		bio := ""
 
 		objectID, err :=
 			primitive.ObjectIDFromHex(
@@ -110,26 +112,21 @@ func GetConversations(c *gin.Context) {
 			).Decode(&user)
 
 			if err == nil {
-
-				username =
-					user.Username
+				username = user.Username
+				profilePic = user.ProfilePic
+				bio = user.Bio
 			}
 		}
 
 		conversationMap[partnerID] =
 			models.Conversation{
-
-				UserID: partnerID,
-
-				Username: username,
-
-				LastMessage:
-					msg.Content,
-
-				LastMessageTime:
-					msg.CreatedAt,
-
-				UnreadCount: 0,
+				UserID:          partnerID,
+				Username:        username,
+				LastMessage:     msg.Content,
+				LastMessageTime: msg.CreatedAt,
+				UnreadCount:     0,
+				ProfilePic:      profilePic,
+				Bio:             bio,
 			}
 	}
 

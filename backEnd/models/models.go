@@ -8,5 +8,7 @@ type User struct {
 	Username string 		   `bson:"username" json:"username"`
 	Email    string 		   `bson:"email" json:"email"`
 	Password string 		   `bson:"password" json:"password"`
+	ProfilePic string          `bson:"profile_pic,omitempty" json:"profile_pic"`
+	Bio       string           `bson:"bio,omitempty" json:"bio"`
 	CreatedAt time.Time  `bson:"created_at" json:"created_at"`
 }

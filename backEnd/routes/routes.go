@@ -25,6 +25,7 @@ func AuthRoutes(router *gin.Engine) {
 	protected.Use(middleware.AuthMiddleware())
 
 	protected.GET("/profile", controllers.GetProfile)
+	protected.PUT("/profile", controllers.UpdateProfile)
 	protected.POST("/logout", controllers.Logout)
 	protected.GET("/messages/:receiverId",controllers.GetChatHistory,)
 	protected.GET("/conversations",controllers.GetConversations,)
