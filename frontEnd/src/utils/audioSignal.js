@@ -8,10 +8,16 @@ class CallAudioSignal {
 
     initContext() {
         if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            try {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch (err) {
+                console.error("Failed to initialize AudioContext:", err);
+            }
         }
-        if (this.audioCtx.state === "suspended") {
-            this.audioCtx.resume();
+        if (this.audioCtx && this.audioCtx.state === "suspended") {
+            this.audioCtx.resume().catch(err => {
+                console.warn("AudioContext resume failed:", err);
+            });
         }
     }
 
@@ -121,3 +127,25 @@ class CallAudioSignal {
 }
 
 export const audioSignal = new CallAudioSignal();
+
+if (typeof window !== "undefined") {
+    const unlockAudio = () => {
+        audioSignal.initContext();
+        if (audioSignal.audioCtx) {
+            try {
+                const buffer = audioSignal.audioCtx.createBuffer(1, 1, 22050);
+                const source = audioSignal.audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioSignal.audioCtx.destination);
+                source.start(0);
+                console.log("AudioContext unlocked and silent buffer played.");
+            } catch (err) {
+                console.warn("Silent buffer play failed:", err);
+            }
+        }
+        window.removeEventListener("click", unlockAudio);
+        window.removeEventListener("touchstart", unlockAudio);
+    };
+    window.addEventListener("click", unlockAudio, { passive: true });
+    window.addEventListener("touchstart", unlockAudio, { passive: true });
+}

@@ -31,6 +31,19 @@ function ChatDashboard() {
         return () => window.removeEventListener("profileUpdate", handleProfileUpdate);
     }, []);
 
+    // Handle hardware/browser back button on mobile
+    useEffect(() => {
+        const handlePopState = (event) => {
+            if (selectedUser) {
+                setSelectedUser(null);
+            }
+        };
+        window.addEventListener("popstate", handlePopState);
+        return () => {
+            window.removeEventListener("popstate", handlePopState);
+        };
+    }, [selectedUser]);
+
     const toggleTheme = () => {
         setTheme(prev => (prev === "light" ? "dark" : "light"));
     };
@@ -43,6 +56,9 @@ function ChatDashboard() {
         setSelectedUser(user);
         setSelectedUserStatus(null); // Reset status when switching users
         setShowProfilePanel(false); // Close profile panel when switching users
+        if (user && !selectedUser) {
+            window.history.pushState({ chatActive: true }, "");
+        }
     };
 
     return (

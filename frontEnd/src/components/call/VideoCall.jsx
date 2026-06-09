@@ -21,6 +21,11 @@ function VideoCall({
     useEffect(() => {
         if (localVideoRef.current) {
             localVideoRef.current.srcObject = isVideoMuted ? null : localStream;
+            if (localStream && !isVideoMuted) {
+                localVideoRef.current.play().catch(err => {
+                    console.warn("Failed to play local video:", err);
+                });
+            }
         }
     }, [localStream, isVideoMuted]);
 
@@ -28,6 +33,11 @@ function VideoCall({
     useEffect(() => {
         if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
+            if (remoteStream) {
+                remoteVideoRef.current.play().catch(err => {
+                    console.warn("Failed to play remote video:", err);
+                });
+            }
         }
     }, [remoteStream]);
 
@@ -51,14 +61,15 @@ function VideoCall({
         <div className="video-call-overlay">
             {/* Remote Video Container */}
             <div className="remote-video-wrapper">
-                {hasRemoteVideo ? (
-                    <video
-                        ref={remoteVideoRef}
-                        className="remote-video"
-                        autoPlay
-                        playsInline
-                    />
-                ) : (
+                <video
+                    ref={remoteVideoRef}
+                    className="remote-video"
+                    style={{ display: hasRemoteVideo ? "block" : "none" }}
+                    autoPlay
+                    playsInline
+                    muted
+                />
+                {!hasRemoteVideo && (
                     <div className="video-placeholder">
                         <div className="video-placeholder-avatar">
                             {initials}
@@ -72,15 +83,15 @@ function VideoCall({
 
             {/* Local PIP Video */}
             <div className="local-video-wrapper">
-                {!isVideoMuted && localStream ? (
-                    <video
-                        ref={localVideoRef}
-                        className="local-video"
-                        autoPlay
-                        playsInline
-                        muted
-                    />
-                ) : (
+                <video
+                    ref={localVideoRef}
+                    className="local-video"
+                    style={{ display: (!isVideoMuted && localStream) ? "block" : "none" }}
+                    autoPlay
+                    playsInline
+                    muted
+                />
+                {(!localStream || isVideoMuted) && (
                     <div className="video-placeholder">
                         <div className="video-placeholder-avatar" style={{ width: 40, height: 40, fontSize: 16 }}>
                             {initials}

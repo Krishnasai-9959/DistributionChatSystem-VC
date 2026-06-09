@@ -3,6 +3,7 @@ import {
     useRef,
     useState
 } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
     getUserStatus
@@ -32,6 +33,7 @@ function ChatArea({
     onToggleProfile,
     onBack
 }) {
+    const navigate = useNavigate();
 
     const [messages, setMessages] = useState([]);
     const [userStatus, setUserStatus] = useState(null);
@@ -59,6 +61,7 @@ function ChatArea({
     const remoteAudioRef = useRef(null);
     const iceCandidatesQueueRef = useRef([]);
     const timerRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
 
     const rtcConfig = {
         iceServers: [
@@ -293,6 +296,9 @@ function ChatArea({
                     setRemoteStream(event.streams[0]);
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
+                        remoteAudioRef.current.play().catch(err => {
+                            console.warn("Failed to play remote audio element automatically:", err);
+                        });
                     }
                 }
             };
@@ -363,6 +369,9 @@ function ChatArea({
                     setRemoteStream(event.streams[0]);
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
+                        remoteAudioRef.current.play().catch(err => {
+                            console.warn("Failed to play remote audio element automatically:", err);
+                        });
                     }
                 }
             };
@@ -432,6 +441,9 @@ function ChatArea({
                     setRemoteStream(event.streams[0]);
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = event.streams[0];
+                        remoteAudioRef.current.play().catch(err => {
+                            console.warn("Failed to play remote audio element automatically:", err);
+                        });
                     }
                 }
             };
@@ -487,6 +499,10 @@ function ChatArea({
     }
 
     async function connectSocket() {
+        if (socketRef.current && (socketRef.current.readyState === WebSocket.CONNECTING || socketRef.current.readyState === WebSocket.OPEN)) {
+            return;
+        }
+
         try {
             const response = await getSocketToken();
             const token = response.token || response.socket_token;
@@ -504,6 +520,10 @@ function ChatArea({
 
             socket.onopen = () => {
                 console.log("WebSocket Connected");
+                if (reconnectTimeoutRef.current) {
+                    clearTimeout(reconnectTimeoutRef.current);
+                    reconnectTimeoutRef.current = null;
+                }
             };
 
             socket.onmessage = async (event) => {
@@ -537,8 +557,8 @@ function ChatArea({
                         await peerConnectionRef.current.addIceCandidate(candidate);
                     } else {
                         iceCandidatesQueueRef.current.push(candidate);
-                    }
-                    return;
+                      }
+                      return;
                 }
 
                 if (payload.type === "call-ended") {
@@ -562,11 +582,30 @@ function ChatArea({
                 console.error("WebSocket Error:", error);
             };
 
-            socket.onclose = () => {
-                console.log("WebSocket Closed");
+            socket.onclose = (event) => {
+                console.log("WebSocket Closed, reconnecting...", event);
+                if (!reconnectTimeoutRef.current) {
+                    reconnectTimeoutRef.current = setTimeout(() => {
+                        reconnectTimeoutRef.current = null;
+                        connectSocket();
+                    }, 3000);
+                }
             };
         } catch (error) {
             console.error("Failed to connect WebSocket:", error);
+            if (error.response?.status === 401) {
+                localStorage.removeItem("access_token");
+                localStorage.removeItem("refresh_token");
+                localStorage.removeItem("user");
+                navigate("/login");
+                return;
+            }
+            if (!reconnectTimeoutRef.current) {
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    reconnectTimeoutRef.current = null;
+                    connectSocket();
+                }, 5000);
+            }
         }
     }
 
@@ -616,6 +655,9 @@ function ChatArea({
             connectSocket();
         }, 0);
         return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
             socketRef.current?.close();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -903,7 +945,7 @@ function ChatArea({
         <div className="chat-area">
             <div className="chat-header">
                 <div className="chat-header-user-info" onClick={onToggleProfile} title="Click to view contact profile">
-                    <button className="chat-back-btn" onClick={(e) => { e.stopPropagation(); onBack(); }} title="Back to chats">
+                    <button className="chat-back-btn" onClick={(e) => { e.stopPropagation(); window.history.back(); }} title="Back to chats">
                         ←
                     </button>
                     <div className="chat-header-avatar">
