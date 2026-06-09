@@ -534,6 +534,7 @@ function ChatArea({
                     clearTimeout(reconnectTimeoutRef.current);
                     reconnectTimeoutRef.current = null;
                 }
+                loadMessages();
             };
 
             socket.onmessage = async (event) => {
@@ -623,8 +624,10 @@ function ChatArea({
     }
 
     async function loadMessages() {
+        const currentSelected = selectedUserRef.current;
+        if (!currentSelected) return;
         try {
-            const response = await getChatHistory(selectedUser.id);
+            const response = await getChatHistory(currentSelected.id);
 
             const decryptedMessages = (response.messages || []).map(msg => {
                 try {
@@ -690,6 +693,7 @@ function ChatArea({
             if (document.visibilityState === "visible") {
                 console.log("Tab visibility changed to visible: refreshing status and socket connection");
                 loadUserStatus();
+                loadMessages();
                 if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
                     connectSocket();
                 }
@@ -700,6 +704,7 @@ function ChatArea({
         const handleWindowFocus = () => {
             console.log("Window focused: refreshing status");
             loadUserStatus();
+            loadMessages();
             if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
                 connectSocket();
             }
@@ -983,6 +988,43 @@ function ChatArea({
                     <h3>Select a conversation to start chatting</h3>
                     <p>Select contacts from the sidebar search or history list to connect.</p>
                 </div>
+
+                <IncomingCallModal
+                    caller={incomingCall}
+                    onAccept={acceptCall}
+                    onReject={rejectCall}
+                />
+
+                {callType === "video" ? (
+                    <VideoCall
+                        inCall={inCall}
+                        onEndCall={endCall}
+                        callStatus={callStatus}
+                        callerName={callerName}
+                        localStream={localStream}
+                        remoteStream={remoteStream}
+                        isMuted={isMuted}
+                        onToggleMute={toggleMute}
+                        isVideoMuted={isVideoMuted}
+                        onToggleVideo={toggleVideo}
+                        callDuration={callDuration}
+                    />
+                ) : (
+                    <VoiceCall
+                        inCall={inCall}
+                        onEndCall={endCall}
+                        callStatus={callStatus}
+                        callerName={callerName}
+                        isMuted={isMuted}
+                        onToggleMute={toggleMute}
+                        callDuration={callDuration}
+                    />
+                )}
+
+                <audio
+                    ref={remoteAudioRef}
+                    autoPlay
+                />
             </div>
         );
     }

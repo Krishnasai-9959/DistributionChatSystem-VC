@@ -25,10 +25,25 @@ var clients = make(map[string]*websocket.Conn)
 
 var mutex sync.Mutex
 
-// channels
-var broadcast = make(chan models.Message)
+// userID -> write mutex for thread-safe concurrent writes
+var clientMutexes = make(map[string]*sync.Mutex)
+var clientMutexesMutex sync.Mutex
 
-var callBroadcast = make(chan models.CallSignal)
+func getClientMutex(userID string) *sync.Mutex {
+	clientMutexesMutex.Lock()
+	defer clientMutexesMutex.Unlock()
+	m, ok := clientMutexes[userID]
+	if !ok {
+		m = &sync.Mutex{}
+		clientMutexes[userID] = m
+	}
+	return m
+}
+
+// channels
+var broadcast = make(chan models.Message, 1000)
+
+var callBroadcast = make(chan models.CallSignal, 1000)
 
 // Handle websocket connections
 func HandleConnections(c *gin.Context) {
@@ -259,38 +274,27 @@ func HandleMessages() {
 		mutex.Unlock()
 
 		if ok {
+			go func(conn *websocket.Conn, message models.Message, rID string) {
+				m := getClientMutex(rID)
+				m.Lock()
+				defer m.Unlock()
 
-			err := receiverConn.WriteJSON(msg)
+				conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+				err := conn.WriteJSON(message)
 
-			if err != nil {
+				if err != nil {
+					fmt.Println("Write error:", err)
+					conn.Close()
 
-				fmt.Println(
-					"Write error:",
-					err,
-				)
+					mutex.Lock()
+					delete(clients, rID)
+					mutex.Unlock()
 
-				receiverConn.Close()
-
-				mutex.Lock()
-
-				delete(
-					clients,
-					msg.ReceiverID,
-				)
-
-				mutex.Unlock()
-
-				fmt.Println(
-					"Removed offline user:",
-					msg.ReceiverID,
-				)
-
-			} else {
-
-				fmt.Println(
-					"Message delivered successfully",
-				)
-			}
+					fmt.Println("Removed offline user:", rID)
+				} else {
+					fmt.Println("Message delivered successfully")
+				}
+			}(receiverConn, msg, msg.ReceiverID)
 
 		} else {
 
@@ -317,18 +321,18 @@ func HandleCallSignals() {
 		mutex.Unlock()
 
 		if ok {
+			go func(conn *websocket.Conn, sig models.CallSignal, rID string) {
+				m := getClientMutex(rID)
+				m.Lock()
+				defer m.Unlock()
 
-			err := receiverConn.WriteJSON(
-				signal,
-			)
+				conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+				err := conn.WriteJSON(sig)
 
-			if err != nil {
-
-				fmt.Println(
-					"Call signal error:",
-					err,
-				)
-			}
+				if err != nil {
+					fmt.Println("Call signal error:", err)
+				}
+			}(receiverConn, signal, signal.ReceiverID)
 		}
 	}
 }
