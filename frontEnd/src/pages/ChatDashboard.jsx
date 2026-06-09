@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import ChatSidebar from "../components/chat/ChatSidebar";
 import ChatArea from "../components/chat/ChatArea";
 import ProfileDetailPanel from "../components/chat/ProfileDetailPanel";
+import { startSocket } from "../services/socketService";
 
 import "./ChatDashboard.css";
 
@@ -15,6 +16,11 @@ function ChatDashboard() {
     const [theme, setTheme] = useState(() => {
         return localStorage.getItem("theme") || "light";
     });
+
+    // Start socket connection when dashboard mounts
+    useEffect(() => {
+        startSocket().catch(err => console.warn("startSocket error:", err));
+    }, []);
 
     // Handle theme side effects
     useEffect(() => {

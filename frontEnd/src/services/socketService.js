@@ -12,6 +12,15 @@ function dispatch(payload) {
 }
 
 async function startSocket() {
+    const accessToken = localStorage.getItem("access_token");
+    if (!accessToken) {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        return;
+    }
+
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
 
     try {
