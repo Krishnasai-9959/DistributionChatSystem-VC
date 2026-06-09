@@ -67,7 +67,6 @@ function VideoCall({
                     style={{ display: hasRemoteVideo ? "block" : "none" }}
                     autoPlay
                     playsInline
-                    muted
                 />
                 {!hasRemoteVideo && (
                     <div className="video-placeholder">
