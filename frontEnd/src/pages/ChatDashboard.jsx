@@ -76,6 +76,7 @@ function ChatDashboard() {
             <div className="chat-area-wrapper">
                 <ChatArea
                     selectedUser={selectedUser}
+                    onUserSelect={handleUserSelect}
                     onMessageSent={triggerConversationRefresh}
                     onMessagesUpdate={setCurrentMessages}
                     onStatusUpdate={setSelectedUserStatus}

@@ -1,10 +1,71 @@
+import { useEffect } from "react";
 import "./IncomingCallBanner.css";
 
 function IncomingCallModal({
     caller,
     onAccept,
-    onReject
+    onReject,
+    onBannerClick
 }) {
+
+    useEffect(() => {
+        let audioCtx = null;
+        let ringInterval = null;
+
+        if (caller) {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {
+                    audioCtx = new AudioContext();
+                    
+                    const playRingingChime = () => {
+                        if (!audioCtx || audioCtx.state === 'closed') return;
+                        if (audioCtx.state === 'suspended') {
+                            audioCtx.resume();
+                        }
+                        const now = audioCtx.currentTime;
+                        const notes = [523.25, 659.25, 783.99, 1046.50];
+                        notes.forEach((freq, index) => {
+                            if (!audioCtx || audioCtx.state === 'closed') return;
+                            const osc = audioCtx.createOscillator();
+                            const gainNode = audioCtx.createGain();
+                            
+                            osc.type = 'sine';
+                            osc.frequency.setValueAtTime(freq, now + index * 0.15);
+                            
+                            gainNode.gain.setValueAtTime(0, now + index * 0.15);
+                            gainNode.gain.linearRampToValueAtTime(0.12, now + index * 0.15 + 0.05);
+                            gainNode.gain.exponentialRampToValueAtTime(0.001, now + index * 0.15 + 0.8);
+                            
+                            osc.connect(gainNode);
+                            gainNode.connect(audioCtx.destination);
+                            
+                            osc.start(now + index * 0.15);
+                            osc.stop(now + index * 0.15 + 0.85);
+                        });
+                    };
+
+                    playRingingChime();
+                    ringInterval = setInterval(playRingingChime, 2000);
+                }
+            } catch (err) {
+                console.warn("Could not play incoming call synthetic ringtone:", err);
+            }
+        }
+
+        return () => {
+            if (ringInterval) {
+                clearInterval(ringInterval);
+            }
+            if (audioCtx) {
+                try {
+                    audioCtx.close();
+                } catch (e) {
+                    // ignore
+                }
+            }
+        };
+    }, [caller]);
 
     if (!caller) {
         return null;
@@ -18,7 +79,11 @@ function IncomingCallModal({
     const isVideo = caller.type === "video-offer";
 
     return (
-        <div className="incoming-call-banner">
+        <div 
+            className="incoming-call-banner" 
+            onClick={onBannerClick} 
+            style={{ cursor: onBannerClick ? 'pointer' : 'default' }}
+        >
             <div className="banner-avatar-container">
                 <div className="banner-avatar-pulse"></div>
                 <div className="banner-avatar">
@@ -38,7 +103,10 @@ function IncomingCallModal({
             <div className="banner-actions">
                 <button
                     className="banner-btn accept-btn"
-                    onClick={onAccept}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAccept();
+                    }}
                     title="Answer Call"
                 >
                     <svg viewBox="0 0 24 24">
@@ -48,7 +116,10 @@ function IncomingCallModal({
 
                 <button
                     className="banner-btn decline-btn"
-                    onClick={onReject}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onReject();
+                    }}
                     title="Decline Call"
                 >
                     <svg viewBox="0 0 24 24">

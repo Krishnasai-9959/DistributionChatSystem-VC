@@ -24,6 +24,7 @@ import "./ChatArea.css";
 
 function ChatArea({
     selectedUser,
+    onUserSelect,
     onMessageSent,
     onMessagesUpdate,
     onStatusUpdate,
@@ -141,9 +142,19 @@ function ChatArea({
         if (inCall && zegoContainerRef.current) {
             const initZego = async () => {
                 try {
-                    const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
-                    const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
+                    let rawAppID = import.meta.env.VITE_ZEGO_APP_ID;
+                    if (typeof rawAppID === "string") {
+                        rawAppID = rawAppID.replace(/['"]/g, "").trim();
+                    }
+                    const appID = Number(rawAppID);
+
+                    let serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
+                    if (typeof serverSecret === "string") {
+                        serverSecret = serverSecret.replace(/['"]/g, "").trim();
+                    }
                     
+                    console.log("Initializing ZegoCloud calling: AppID =", appID, "ServerSecret set =", !!serverSecret, "CallType =", callType);
+
                     if (!appID || !serverSecret) {
                         console.error("ZegoCloud appID or serverSecret is missing from env");
                         alert("Call system configuration error. Please check environment variables.");
@@ -169,10 +180,12 @@ function ChatArea({
                         container: zegoContainerRef.current,
                         sharedLinks: [],
                         scenario: {
-                            mode: callType === "video" ? ZegoUIKitPrebuilt.OneONoneCall : ZegoUIKitPrebuilt.GroupCall
+                            mode: ZegoUIKitPrebuilt.OneONoneCall
                         },
-                        showScreenSharingButton: callType === "video",
+                        turnOnCameraWhenJoining: callType === "video",
                         showMyCameraToggleButton: callType === "video",
+                        showScreenSharingButton: callType === "video",
+                        turnOnMicrophoneWhenJoining: true,
                         showMyMicrophoneToggleButton: true,
                         showAudioVideoSettingsButton: true,
                         showTextChat: false,
@@ -276,6 +289,14 @@ function ChatArea({
         const callerId = incomingCall.sender_id;
         const roomID = incomingCall.data?.roomID;
         const incomingCallType = incomingCall.data?.callType || (incomingCall.type === "video-offer" ? "video" : "voice");
+
+        // Open caller chat
+        if (onUserSelect) {
+            onUserSelect({
+                id: callerId,
+                username: incomingCall.username || `User (${callerId.substring(0, 6)})`
+            });
+        }
 
         zegoRoomIDRef.current = roomID;
         setCallerName(incomingCall.username);
@@ -505,15 +526,8 @@ function ChatArea({
 
     useEffect(() => {
         return () => {
-            audioSignal.stop();
             if (timerRef.current) {
                 clearInterval(timerRef.current);
-            }
-            if (peerConnectionRef.current) {
-                peerConnectionRef.current.close();
-            }
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => track.stop());
             }
         };
     }, []);
@@ -739,6 +753,14 @@ function ChatArea({
                     caller={incomingCall}
                     onAccept={acceptCall}
                     onReject={rejectCall}
+                    onBannerClick={() => {
+                        if (incomingCall && onUserSelect) {
+                            onUserSelect({
+                                id: incomingCall.sender_id,
+                                username: incomingCall.username || `User (${incomingCall.sender_id.substring(0, 6)})`
+                            });
+                        }
+                    }}
                 />
 
                 {inCall && (
@@ -823,6 +845,14 @@ function ChatArea({
                 caller={incomingCall}
                 onAccept={acceptCall}
                 onReject={rejectCall}
+                onBannerClick={() => {
+                    if (incomingCall && onUserSelect) {
+                        onUserSelect({
+                            id: incomingCall.sender_id,
+                            username: incomingCall.username || `User (${incomingCall.sender_id.substring(0, 6)})`
+                        });
+                    }
+                }}
             />
 
             {inCall && (

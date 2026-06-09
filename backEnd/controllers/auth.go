@@ -5,6 +5,8 @@ import (
 	"backEnd/models"
 	"backEnd/utils"
 	"context"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -268,9 +270,9 @@ func ForgotPassword(c *gin.Context) {
 	).Err()
 
 	if err != nil {
-
+		log.Printf("ForgotPassword Redis Set Error: %v\n", err)
 		c.JSON(500, gin.H{
-			"error": "Failed to store OTP",
+			"error": fmt.Sprintf("Failed to store OTP: %v", err),
 		})
 
 		return
@@ -283,9 +285,9 @@ func ForgotPassword(c *gin.Context) {
 	)
 
 	if err != nil {
-
+		log.Printf("ForgotPassword Email Send Error: %v\n", err)
 		c.JSON(500, gin.H{
-			"error": "Failed to send email",
+			"error": fmt.Sprintf("Failed to send email: %v", err),
 		})
 
 		return
@@ -451,9 +453,9 @@ func ResendOTP(c *gin.Context) {
 	).Err()
 
 	if err != nil {
-
+		log.Printf("ResendOTP Redis Set Error: %v\n", err)
 		c.JSON(500, gin.H{
-			"error": "Failed to store OTP",
+			"error": fmt.Sprintf("Failed to store OTP: %v", err),
 		})
 
 		return
@@ -466,9 +468,9 @@ func ResendOTP(c *gin.Context) {
 	)
 
 	if err != nil {
-
+		log.Printf("ResendOTP Email Send Error: %v\n", err)
 		c.JSON(500, gin.H{
-			"error": "Failed to send OTP",
+			"error": fmt.Sprintf("Failed to send OTP: %v", err),
 		})
 
 		return
