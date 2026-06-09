@@ -14,12 +14,9 @@ import {
     getConversations
 } from "../../services/chatService";
 
-import CallButton from "../call/CallButton";
-import VoiceCall from "../call/VoiceCall";
-import VideoCall from "../call/VideoCall";
 import IncomingCallModal from "../call/IncomingCallModal";
+import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 
-import { audioSignal } from "../../utils/audioSignal";
 import { encryptMessage, decryptMessage, isEncryptedMessage, getFileDataFromUrl } from "../../utils/crypto";
 import { sendSocketMessage } from "../../services/socketService";
 
@@ -47,13 +44,9 @@ function ChatArea({
     const [incomingCall, setIncomingCall] = useState(null);
     const [inCall, setInCall] = useState(false);
     const [callStatus, setCallStatus] = useState(null);
-    const [isMuted, setIsMuted] = useState(false);
     const [callDuration, setCallDuration] = useState(0);
     const [callerName, setCallerName] = useState("");
     const [callType, setCallType] = useState(null);
-    const [localStream, setLocalStream] = useState(null);
-    const [remoteStream, setRemoteStream] = useState(null);
-    const [isVideoMuted, setIsVideoMuted] = useState(false);
 
     // Profile Details Sync State
     const [userProfilePic, setUserProfilePic] = useState("");
@@ -63,27 +56,10 @@ function ChatArea({
     // socket is now global (services/socketService); local ref removed
     const messagesEndRef = useRef(null);
     const messagesContainerRef = useRef(null);
-    const peerConnectionRef = useRef(null);
-    const localStreamRef = useRef(null);
-    const remoteAudioRef = useRef(null);
-    const iceCandidatesQueueRef = useRef([]);
+    const zegoContainerRef = useRef(null);
+    const zegoInstanceRef = useRef(null);
+    const zegoRoomIDRef = useRef(null);
     const timerRef = useRef(null);
-    const reconnectTimeoutRef = useRef(null);
-
-    // Allow optional TURN servers via env var VITE_TURN_SERVERS (JSON array)
-    let rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-    try {
-        const turnEnv = import.meta.env.VITE_TURN_SERVERS;
-        if (turnEnv) {
-            const parsed = JSON.parse(turnEnv);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                rtcConfig = { iceServers: parsed };
-            }
-        }
-    } catch (e) {
-        console.warn('Invalid VITE_TURN_SERVERS, expecting JSON array:', e);
-    }
-    console.debug('RTC config used:', rtcConfig);
 
     const currentUser = JSON.parse(
         localStorage.getItem("user") || "{}"
@@ -161,6 +137,71 @@ function ChatArea({
         };
     }, [selectedUser]);
 
+    useEffect(() => {
+        if (inCall && zegoContainerRef.current) {
+            const initZego = async () => {
+                try {
+                    const appID = Number(import.meta.env.VITE_ZEGO_APP_ID);
+                    const serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
+                    
+                    if (!appID || !serverSecret) {
+                        console.error("ZegoCloud appID or serverSecret is missing from env");
+                        alert("Call system configuration error. Please check environment variables.");
+                        endCall(false);
+                        return;
+                    }
+
+                    const roomID = zegoRoomIDRef.current || `room_${currentUser.id.substring(0, 6)}_${selectedUser?.id?.substring(0, 6) || 'guest'}_${Date.now()}`;
+                    zegoRoomIDRef.current = roomID;
+
+                    const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+                        appID,
+                        serverSecret,
+                        roomID,
+                        currentUser.id,
+                        currentUser.username || `User_${currentUser.id.substring(0, 4)}`
+                    );
+
+                    const zp = ZegoUIKitPrebuilt.create(kitToken);
+                    zegoInstanceRef.current = zp;
+
+                    zp.joinRoom({
+                        container: zegoContainerRef.current,
+                        sharedLinks: [],
+                        scenario: {
+                            mode: callType === "video" ? ZegoUIKitPrebuilt.OneONoneCall : ZegoUIKitPrebuilt.GroupCall
+                        },
+                        showScreenSharingButton: callType === "video",
+                        showMyCameraToggleButton: callType === "video",
+                        showMyMicrophoneToggleButton: true,
+                        showAudioVideoSettingsButton: true,
+                        showTextChat: false,
+                        showUserList: false,
+                        maxUsers: 2,
+                        layout: "Grid",
+                        showLayoutButton: false,
+                        onLeaveRoom: () => {
+                            endCall(true);
+                        }
+                    });
+                } catch (err) {
+                    console.error("ZegoCloud initialization failed:", err);
+                    endCall(false);
+                }
+            };
+
+            initZego();
+        } else {
+            if (zegoInstanceRef.current) {
+                try {
+                    zegoInstanceRef.current.destroy();
+                } catch (e) {
+                    console.warn("Error destroying Zego instance:", e);
+                }
+                zegoInstanceRef.current = null;
+            }
+        }
+    }, [inCall, callType]);
 
     async function getCallerName(callerId) {
         if (selectedUser && selectedUser.id === callerId) {
@@ -176,70 +217,55 @@ function ChatArea({
         return `User (${callerId.substring(0, 6)})`;
     }
 
-    async function processIceQueue() {
-        while (iceCandidatesQueueRef.current.length > 0) {
-            const candidate = iceCandidatesQueueRef.current.shift();
-            try {
-                console.debug('Processing queued ICE candidate', candidate);
-                if (peerConnectionRef.current) {
-                    await peerConnectionRef.current.addIceCandidate(candidate);
-                    console.debug('Queued ICE candidate added');
-                }
-            } catch (err) {
-                console.error("Error adding queued ICE candidate:", err);
-            }
-        }
-    }
-
     function endCall(sendSignal = true) {
-        audioSignal.stop();
-
         if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
         }
 
-        if (peerConnectionRef.current) {
-            peerConnectionRef.current.close();
-            peerConnectionRef.current = null;
-        }
-
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-            localStreamRef.current = null;
-        }
-
-        if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = null;
-        }
-
-        iceCandidatesQueueRef.current = [];
-
         const receiverId = selectedUser?.id || (incomingCall ? incomingCall.sender_id : null);
 
         if (sendSignal && receiverId) {
-            try { sendSocketMessage({ type: "call-ended", receiver_id: receiverId }); } catch (e) { void e; }
+            try {
+                sendSocketMessage({
+                    type: "call-ended",
+                    receiver_id: receiverId
+                });
+            } catch (e) {
+                console.error("Failed sending call-ended signal:", e);
+            }
         }
+
+        if (zegoInstanceRef.current) {
+            try {
+                zegoInstanceRef.current.destroy();
+            } catch (e) {
+                console.warn("Error destroying Zego instance:", e);
+            }
+            zegoInstanceRef.current = null;
+        }
+        zegoRoomIDRef.current = null;
 
         setInCall(false);
         setIncomingCall(null);
         setCallStatus(null);
-        setIsMuted(false);
-        setIsVideoMuted(false);
-        setCallDuration(0);
-        setLocalStream(null);
-        setRemoteStream(null);
         setCallType(null);
+        setCallDuration(0);
     }
 
     function rejectCall() {
         if (!incomingCall) return;
 
-        audioSignal.stop();
-
         const callerId = incomingCall.sender_id;
 
-        try { sendSocketMessage({ type: "call-ended", receiver_id: callerId }); } catch (e) { void e; }
+        try {
+            sendSocketMessage({
+                type: "call-ended",
+                receiver_id: callerId
+            });
+        } catch (e) {
+            console.error("Failed sending reject signal:", e);
+        }
 
         setIncomingCall(null);
     }
@@ -247,209 +273,67 @@ function ChatArea({
     async function acceptCall() {
         if (!incomingCall) return;
 
-        audioSignal.stop();
-
         const callerId = incomingCall.sender_id;
-        const offer = incomingCall.data;
-        const isVideoCallType = incomingCall.type === "video-offer";
+        const roomID = incomingCall.data?.roomID;
+        const incomingCallType = incomingCall.data?.callType || (incomingCall.type === "video-offer" ? "video" : "voice");
+
+        zegoRoomIDRef.current = roomID;
+        setCallerName(incomingCall.username);
+        setInCall(true);
+        setCallStatus("connected");
+        setCallType(incomingCallType);
+        setIncomingCall(null);
 
         try {
-            iceCandidatesQueueRef.current = [];
-            setCallerName(incomingCall.username);
-            setInCall(true);
-            setCallStatus("connected");
-            setIsMuted(false);
-            setIsVideoMuted(false);
-            setCallDuration(0);
-            setCallType(isVideoCallType ? "video" : "voice");
-            setIncomingCall(null);
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: isVideoCallType
+            sendSocketMessage({
+                type: incomingCallType === "video" ? "video-answer" : "answer",
+                receiver_id: callerId,
+                data: { roomID }
             });
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-
-            const peer = new RTCPeerConnection(rtcConfig);
-            peerConnectionRef.current = peer;
-
-            stream.getTracks().forEach(track => {
-                peer.addTrack(track, stream);
-            });
-
-            peer.onicecandidate = (event) => {
-                console.debug('Local onicecandidate event:', event.candidate);
-                if (event.candidate) {
-                    try { sendSocketMessage({ type: "candidate", receiver_id: callerId, data: event.candidate });
-                          console.debug('Sent local ICE candidate to', callerId, event.candidate);
-                    } catch (e) { console.error('Failed sending ICE candidate', e); }
-                }
-            };
-
-            peer.ontrack = (event) => {
-                console.log("acceptCall: received remote track:", event.track);
-                const streamToUse = event.streams[0] || new MediaStream([event.track]);
-                setRemoteStream(streamToUse);
-            };
-
-            peer.onconnectionstatechange = () => {
-                console.debug('Peer connection state (accept):', peer.connectionState);
-            };
-
-            await peer.setRemoteDescription(new RTCSessionDescription(offer));
-            processIceQueue();
-
-            const answer = await peer.createAnswer();
-            console.debug('Created local answer:', answer);
-            await peer.setLocalDescription(answer);
-            console.debug('Set local description (answer)');
-
-            try { sendSocketMessage({ type: isVideoCallType ? "video-answer" : "answer", receiver_id: callerId, data: answer });
-                console.debug('Sent answer to', callerId);
-            } catch (e) { console.error('Failed sending answer', e); }
-        } catch (error) {
-            console.error("Error accepting call:", error);
-            endCall(false);
+        } catch (e) {
+            console.error("Failed sending answer:", e);
         }
     }
 
     async function startVoiceCall() {
         if (!selectedUser) return;
+        const roomID = `room_${currentUser.id.substring(0, 6)}_${selectedUser.id.substring(0, 6)}_${Date.now()}`;
+        zegoRoomIDRef.current = roomID;
+
+        setCallerName(selectedUser.username);
+        setInCall(true);
+        setCallStatus("calling");
+        setCallType("voice");
 
         try {
-            iceCandidatesQueueRef.current = [];
-            setCallerName(selectedUser.username);
-            setInCall(true);
-            setCallStatus("calling");
-            setIsMuted(false);
-            setCallDuration(0);
-            setCallType("voice");
-
-            audioSignal.playDialtone();
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true
+            sendSocketMessage({
+                type: "offer",
+                receiver_id: selectedUser.id,
+                data: { roomID, callType: "voice" }
             });
-
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-
-            const peer = new RTCPeerConnection(rtcConfig);
-            peerConnectionRef.current = peer;
-
-            stream.getTracks().forEach(track => {
-                peer.addTrack(track, stream);
-            });
-
-            peer.onicecandidate = (event) => {
-                console.debug('Local onicecandidate event:', event.candidate);
-                if (event.candidate) {
-                    try { sendSocketMessage({ type: "candidate", receiver_id: selectedUser.id, data: event.candidate });
-                          console.debug('Sent local ICE candidate to', selectedUser.id, event.candidate);
-                    } catch (e) { console.error('Failed sending ICE candidate', e); }
-                }
-            };
-
-            peer.ontrack = (event) => {
-                console.log("startVoiceCall: received remote track:", event.track);
-                const streamToUse = event.streams[0] || new MediaStream([event.track]);
-                setRemoteStream(streamToUse);
-            };
-
-            const offer = await peer.createOffer();
-            console.debug('Created local offer:', offer);
-            await peer.setLocalDescription(offer);
-            console.debug('Set local description (offer)');
-
-            try { sendSocketMessage({ type: "offer", receiver_id: selectedUser.id, data: offer });
-                console.debug('Sent offer to', selectedUser.id);
-            } catch (e) { console.error('Failed sending offer', e); }
-        } catch (error) {
-            console.error("Voice Call Error:", error);
-            endCall(false);
+        } catch (e) {
+            console.error("Failed sending offer:", e);
         }
     }
 
     async function startVideoCall() {
         if (!selectedUser) return;
+        const roomID = `room_${currentUser.id.substring(0, 6)}_${selectedUser.id.substring(0, 6)}_${Date.now()}`;
+        zegoRoomIDRef.current = roomID;
+
+        setCallerName(selectedUser.username);
+        setInCall(true);
+        setCallStatus("calling");
+        setCallType("video");
 
         try {
-            iceCandidatesQueueRef.current = [];
-            setCallerName(selectedUser.username);
-            setInCall(true);
-            setCallStatus("calling");
-            setIsMuted(false);
-            setIsVideoMuted(false);
-            setCallDuration(0);
-            setCallType("video");
-
-            audioSignal.playDialtone();
-
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-                video: true
+            sendSocketMessage({
+                type: "video-offer",
+                receiver_id: selectedUser.id,
+                data: { roomID, callType: "video" }
             });
-
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-
-            const peer = new RTCPeerConnection(rtcConfig);
-            peerConnectionRef.current = peer;
-
-            stream.getTracks().forEach(track => {
-                peer.addTrack(track, stream);
-            });
-
-            peer.onicecandidate = (event) => {
-                if (event.candidate) {
-                    try { sendSocketMessage({ type: "candidate", receiver_id: selectedUser.id, data: event.candidate }); } catch (e) { void e; }
-                }
-            };
-
-            peer.ontrack = (event) => {
-                console.log("startVideoCall: received remote track:", event.track);
-                const streamToUse = event.streams[0] || new MediaStream([event.track]);
-                setRemoteStream(streamToUse);
-            };
-
-            const offer = await peer.createOffer();
-            console.debug('Created local video offer:', offer);
-            await peer.setLocalDescription(offer);
-            console.debug('Set local description (video offer)');
-
-            try { sendSocketMessage({ type: "video-offer", receiver_id: selectedUser.id, data: offer });
-                console.debug('Sent video-offer to', selectedUser.id);
-            } catch (e) { console.error('Failed sending video-offer', e); }
-        } catch (error) {
-            console.error("Video Call Error:", error);
-            endCall(false);
-        }
-    }
-
-    function toggleMute() {
-        if (localStreamRef.current) {
-            const audioTracks = localStreamRef.current.getAudioTracks();
-            if (audioTracks.length > 0) {
-                const nextMuted = !isMuted;
-                audioTracks.forEach(track => {
-                    track.enabled = !nextMuted;
-                });
-                setIsMuted(nextMuted);
-            }
-        }
-    }
-
-    function toggleVideo() {
-        if (localStreamRef.current) {
-            const videoTracks = localStreamRef.current.getVideoTracks();
-            if (videoTracks.length > 0) {
-                const nextMuted = !isVideoMuted;
-                videoTracks.forEach(track => {
-                    track.enabled = !nextMuted;
-                });
-                setIsVideoMuted(nextMuted);
-            }
+        } catch (e) {
+            console.error("Failed sending video-offer:", e);
         }
     }
 
@@ -520,33 +404,12 @@ function ChatArea({
             }
 
             if (payload.type === "answer" || payload.type === "video-answer") {
-                if (peerConnectionRef.current) {
-                    try {
-                        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.data));
-                        audioSignal.stop();
-                        setCallStatus("connected");
-                        processIceQueue();
-                    } catch (err) {
-                        console.error("Error applying remote answer:", err);
-                    }
-                }
+                setCallStatus("connected");
                 return;
             }
 
             if (payload.type === "candidate") {
-                    const candidate = new RTCIceCandidate(payload.data);
-                    console.debug('Received remote ICE candidate:', payload.data);
-                    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
-                        try {
-                            await peerConnectionRef.current.addIceCandidate(candidate);
-                            console.debug('Remote ICE candidate added');
-                        } catch (err) {
-                            console.error("Error adding ICE candidate:", err);
-                        }
-                    } else {
-                        console.debug('Queueing remote ICE candidate because remoteDescription not set yet');
-                        iceCandidatesQueueRef.current.push(candidate);
-                    }
+                // ZegoCloud manages ICE candidates automatically
                 return;
             }
 
@@ -574,19 +437,6 @@ function ChatArea({
         return () => window.removeEventListener("socketMessage", handler);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    // Automatically bind the remoteStream to the active remoteAudioRef element when either the stream updates or when the DOM element is remounted
-    useEffect(() => {
-        if (remoteAudioRef.current) {
-            console.log("Binding remote stream to audio element:", remoteStream);
-            remoteAudioRef.current.srcObject = remoteStream || null;
-            if (remoteStream) {
-                remoteAudioRef.current.play().catch(err => {
-                    console.warn("Failed to auto-play remote audio stream:", err);
-                });
-            }
-        }
-    }, [remoteStream, selectedUser]);
 
     // Periodically update user status and handle page visibility/window focus to ensure online/offline status stays synced
     useEffect(() => {
@@ -891,36 +741,13 @@ function ChatArea({
                     onReject={rejectCall}
                 />
 
-                {callType === "video" ? (
-                    <VideoCall
-                        inCall={inCall}
-                        onEndCall={endCall}
-                        callStatus={callStatus}
-                        callerName={callerName}
-                        localStream={localStream}
-                        remoteStream={remoteStream}
-                        isMuted={isMuted}
-                        onToggleMute={toggleMute}
-                        isVideoMuted={isVideoMuted}
-                        onToggleVideo={toggleVideo}
-                        callDuration={callDuration}
-                    />
-                ) : (
-                    <VoiceCall
-                        inCall={inCall}
-                        onEndCall={endCall}
-                        callStatus={callStatus}
-                        callerName={callerName}
-                        isMuted={isMuted}
-                        onToggleMute={toggleMute}
-                        callDuration={callDuration}
+                {inCall && (
+                    <div 
+                        className="zego-call-container" 
+                        ref={zegoContainerRef} 
+                        style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 9999, backgroundColor: '#1a1a1a' }}
                     />
                 )}
-
-                <audio
-                    ref={remoteAudioRef}
-                    autoPlay
-                />
             </div>
         );
     }
@@ -961,10 +788,20 @@ function ChatArea({
                 </div>
 
                 <div className="chat-header-actions">
-                    <CallButton
-                        onVoiceCall={startVoiceCall}
-                        onVideoCall={startVideoCall}
-                    />
+                    <div className="call-buttons-container">
+                        <button className="call-btn voice-btn" onClick={startVoiceCall} title="Start Voice Call">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M6.62 10.79a15.15 15.15 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27 11.72 11.72 0 0 0 3.7.59 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.72 11.72 0 0 0 .59 3.7 1 1 0 0 1-.27 1.11z"/>
+                            </svg>
+                            <span>Voice Call</span>
+                        </button>
+                        <button className="call-btn video-btn" onClick={startVideoCall} title="Start Video Call">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                            </svg>
+                            <span>Video Call</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -988,36 +825,13 @@ function ChatArea({
                 onReject={rejectCall}
             />
 
-            {callType === "video" ? (
-                <VideoCall
-                    inCall={inCall}
-                    onEndCall={endCall}
-                    callStatus={callStatus}
-                    callerName={callerName}
-                    localStream={localStream}
-                    remoteStream={remoteStream}
-                    isMuted={isMuted}
-                    onToggleMute={toggleMute}
-                    isVideoMuted={isVideoMuted}
-                    onToggleVideo={toggleVideo}
-                    callDuration={callDuration}
-                />
-            ) : (
-                <VoiceCall
-                    inCall={inCall}
-                    onEndCall={endCall}
-                    callStatus={callStatus}
-                    callerName={callerName}
-                    isMuted={isMuted}
-                    onToggleMute={toggleMute}
-                    callDuration={callDuration}
+            {inCall && (
+                <div 
+                    className="zego-call-container" 
+                    ref={zegoContainerRef} 
+                    style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 9999, backgroundColor: '#1a1a1a' }}
                 />
             )}
-
-            <audio
-                ref={remoteAudioRef}
-                autoPlay
-            />
 
             <div className="chat-input-wrapper-whatsapp">
                 <div className="chat-input-pill-whatsapp">

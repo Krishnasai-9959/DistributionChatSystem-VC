@@ -1,5 +1,4 @@
 import { getSocketToken } from "./chatService";
-import { audioSignal } from "../utils/audioSignal";
 
 let socket = null;
 let reconnectTimer = null;
@@ -69,8 +68,7 @@ async function startSocket() {
                     }
                 }
 
-                // Always play ringtone to ensure user hears it (audioSignal will handle unlock issues)
-                try { audioSignal.playRingtone(); } catch (e) { void e; }
+                // Ringtone will be handled by ZegoCloud
             }
 
             dispatch(payload);

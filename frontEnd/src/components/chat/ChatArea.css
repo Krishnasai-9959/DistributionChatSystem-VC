@@ -562,3 +562,61 @@ body[data-theme="dark"] .message-sent .message-timestamp {
 .message-sent .file-download-button:hover {
     background-color: rgba(255, 255, 255, 0.45);
 }
+
+/* Call Button Styling from VoiceCall.css */
+.call-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 24px;
+    background: #10b981;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+}
+
+.call-btn:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 8px -1px rgba(16, 185, 129, 0.3);
+}
+
+.call-buttons-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.call-btn.video-btn {
+    background: #3b82f6;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+}
+
+.call-btn.video-btn:hover {
+    background: #2563eb;
+    box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.3);
+}
+
+@media (max-width: 768px) {
+    .call-btn span {
+        display: none;
+    }
+    
+    .call-btn {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 50%;
+        gap: 0;
+    }
+
+    .call-buttons-container {
+        gap: 8px;
+    }
+}
