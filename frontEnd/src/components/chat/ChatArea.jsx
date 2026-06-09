@@ -11,7 +11,6 @@ import {
 
 import {
     getChatHistory,
-    getSocketToken,
     getConversations
 } from "../../services/chatService";
 
@@ -22,6 +21,7 @@ import IncomingCallModal from "../call/IncomingCallModal";
 
 import { audioSignal } from "../../utils/audioSignal";
 import { encryptMessage, decryptMessage, isEncryptedMessage, getFileDataFromUrl } from "../../utils/crypto";
+import { sendSocketMessage } from "../../services/socketService";
 
 import "./ChatArea.css";
 
@@ -60,7 +60,7 @@ function ChatArea({
     const [mediaVisibility, setMediaVisibility] = useState(true);
     const [chatWallpaper, setChatWallpaper] = useState("");
 
-    const socketRef = useRef(null);
+    // socket is now global (services/socketService); local ref removed
     const messagesEndRef = useRef(null);
     const messagesContainerRef = useRef(null);
     const peerConnectionRef = useRef(null);
@@ -173,8 +173,10 @@ function ChatArea({
         while (iceCandidatesQueueRef.current.length > 0) {
             const candidate = iceCandidatesQueueRef.current.shift();
             try {
+                console.debug('Processing queued ICE candidate', candidate);
                 if (peerConnectionRef.current) {
                     await peerConnectionRef.current.addIceCandidate(candidate);
+                    console.debug('Queued ICE candidate added');
                 }
             } catch (err) {
                 console.error("Error adding queued ICE candidate:", err);
@@ -208,18 +210,8 @@ function ChatArea({
 
         const receiverId = selectedUser?.id || (incomingCall ? incomingCall.sender_id : null);
 
-        if (
-            sendSignal &&
-            receiverId &&
-            socketRef.current &&
-            socketRef.current.readyState === WebSocket.OPEN
-        ) {
-            socketRef.current.send(
-                JSON.stringify({
-                    type: "call-ended",
-                    receiver_id: receiverId
-                })
-            );
+        if (sendSignal && receiverId) {
+            try { sendSocketMessage({ type: "call-ended", receiver_id: receiverId }); } catch (e) { void e; }
         }
 
         setInCall(false);
@@ -240,14 +232,7 @@ function ChatArea({
 
         const callerId = incomingCall.sender_id;
 
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-            socketRef.current.send(
-                JSON.stringify({
-                    type: "call-ended",
-                    receiver_id: callerId
-                })
-            );
-        }
+        try { sendSocketMessage({ type: "call-ended", receiver_id: callerId }); } catch (e) { void e; }
 
         setIncomingCall(null);
     }
@@ -287,14 +272,11 @@ function ChatArea({
             });
 
             peer.onicecandidate = (event) => {
-                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                    socketRef.current.send(
-                        JSON.stringify({
-                            type: "candidate",
-                            receiver_id: callerId,
-                            data: event.candidate
-                        })
-                    );
+                console.debug('Local onicecandidate event:', event.candidate);
+                if (event.candidate) {
+                    try { sendSocketMessage({ type: "candidate", receiver_id: callerId, data: event.candidate });
+                          console.debug('Sent local ICE candidate to', callerId, event.candidate);
+                    } catch (e) { console.error('Failed sending ICE candidate', e); }
                 }
             };
 
@@ -304,21 +286,21 @@ function ChatArea({
                 setRemoteStream(streamToUse);
             };
 
+            peer.onconnectionstatechange = () => {
+                console.debug('Peer connection state (accept):', peer.connectionState);
+            };
+
             await peer.setRemoteDescription(new RTCSessionDescription(offer));
             processIceQueue();
 
             const answer = await peer.createAnswer();
+            console.debug('Created local answer:', answer);
             await peer.setLocalDescription(answer);
+            console.debug('Set local description (answer)');
 
-            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                socketRef.current.send(
-                    JSON.stringify({
-                        type: isVideoCallType ? "video-answer" : "answer",
-                        receiver_id: callerId,
-                        data: answer
-                    })
-                );
-            }
+            try { sendSocketMessage({ type: isVideoCallType ? "video-answer" : "answer", receiver_id: callerId, data: answer });
+                console.debug('Sent answer to', callerId);
+            } catch (e) { console.error('Failed sending answer', e); }
         } catch (error) {
             console.error("Error accepting call:", error);
             endCall(false);
@@ -354,14 +336,11 @@ function ChatArea({
             });
 
             peer.onicecandidate = (event) => {
-                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                    socketRef.current.send(
-                        JSON.stringify({
-                            type: "candidate",
-                            receiver_id: selectedUser.id,
-                            data: event.candidate
-                        })
-                    );
+                console.debug('Local onicecandidate event:', event.candidate);
+                if (event.candidate) {
+                    try { sendSocketMessage({ type: "candidate", receiver_id: selectedUser.id, data: event.candidate });
+                          console.debug('Sent local ICE candidate to', selectedUser.id, event.candidate);
+                    } catch (e) { console.error('Failed sending ICE candidate', e); }
                 }
             };
 
@@ -372,17 +351,13 @@ function ChatArea({
             };
 
             const offer = await peer.createOffer();
+            console.debug('Created local offer:', offer);
             await peer.setLocalDescription(offer);
+            console.debug('Set local description (offer)');
 
-            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                socketRef.current.send(
-                    JSON.stringify({
-                        type: "offer",
-                        receiver_id: selectedUser.id,
-                        data: offer
-                    })
-                );
-            }
+            try { sendSocketMessage({ type: "offer", receiver_id: selectedUser.id, data: offer });
+                console.debug('Sent offer to', selectedUser.id);
+            } catch (e) { console.error('Failed sending offer', e); }
         } catch (error) {
             console.error("Voice Call Error:", error);
             endCall(false);
@@ -420,14 +395,8 @@ function ChatArea({
             });
 
             peer.onicecandidate = (event) => {
-                if (event.candidate && socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                    socketRef.current.send(
-                        JSON.stringify({
-                            type: "candidate",
-                            receiver_id: selectedUser.id,
-                            data: event.candidate
-                        })
-                    );
+                if (event.candidate) {
+                    try { sendSocketMessage({ type: "candidate", receiver_id: selectedUser.id, data: event.candidate }); } catch (e) { void e; }
                 }
             };
 
@@ -438,17 +407,13 @@ function ChatArea({
             };
 
             const offer = await peer.createOffer();
+            console.debug('Created local video offer:', offer);
             await peer.setLocalDescription(offer);
+            console.debug('Set local description (video offer)');
 
-            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                socketRef.current.send(
-                    JSON.stringify({
-                        type: "video-offer",
-                        receiver_id: selectedUser.id,
-                        data: offer
-                    })
-                );
-            }
+            try { sendSocketMessage({ type: "video-offer", receiver_id: selectedUser.id, data: offer });
+                console.debug('Sent video-offer to', selectedUser.id);
+            } catch (e) { console.error('Failed sending video-offer', e); }
         } catch (error) {
             console.error("Video Call Error:", error);
             endCall(false);
@@ -490,120 +455,7 @@ function ChatArea({
         }
     }
 
-    async function connectSocket() {
-        if (socketRef.current && (socketRef.current.readyState === WebSocket.CONNECTING || socketRef.current.readyState === WebSocket.OPEN)) {
-            return;
-        }
-
-        try {
-            const response = await getSocketToken();
-            const token = response.token || response.socket_token;
-
-            const WS_URL =
-                import.meta.env.VITE_API_URL
-                    .replace("https://", "wss://")
-                    .replace("http://", "ws://");
-
-            const socket = new WebSocket(
-                `${WS_URL}/ws?socket_token=${token}`
-            );
-
-            socketRef.current = socket;
-
-            socket.onopen = () => {
-                console.log("WebSocket Connected");
-                if (reconnectTimeoutRef.current) {
-                    clearTimeout(reconnectTimeoutRef.current);
-                    reconnectTimeoutRef.current = null;
-                }
-                loadMessages();
-            };
-
-            socket.onmessage = async (event) => {
-                const payload = JSON.parse(event.data);
-
-                if (payload.type === "offer" || payload.type === "video-offer") {
-                    audioSignal.playRingtone();
-                    const name = await getCallerName(payload.sender_id);
-                    setIncomingCall({
-                        ...payload,
-                        username: name
-                    });
-                    return;
-                }
-
-                if (payload.type === "answer" || payload.type === "video-answer") {
-                    if (peerConnectionRef.current) {
-                        await peerConnectionRef.current.setRemoteDescription(
-                            new RTCSessionDescription(payload.data)
-                        );
-                        audioSignal.stop();
-                        setCallStatus("connected");
-                        processIceQueue();
-                    }
-                    return;
-                }
-
-                if (payload.type === "candidate") {
-                    const candidate = new RTCIceCandidate(payload.data);
-                    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
-                        await peerConnectionRef.current.addIceCandidate(candidate);
-                    } else {
-                        iceCandidatesQueueRef.current.push(candidate);
-                      }
-                      return;
-                }
-
-                if (payload.type === "call-ended") {
-                    endCall(false);
-                    return;
-                }
-
-                if (payload.content && isEncryptedMessage(payload.content)) {
-                    try {
-                        payload.content = decryptMessage(payload.content);
-                    } catch (e) {
-                        console.error("Failed to decrypt incoming message:", e);
-                    }
-                }
-
-                const currentSelected = selectedUserRef.current;
-                if (currentSelected && (payload.sender_id === currentSelected.id || payload.receiver_id === currentSelected.id)) {
-                    setMessages(prev => [...prev, payload]);
-                }
-                onMessageSent?.();
-            };
-
-            socket.onerror = (error) => {
-                console.error("WebSocket Error:", error);
-            };
-
-            socket.onclose = (event) => {
-                console.log("WebSocket Closed, reconnecting...", event);
-                if (!reconnectTimeoutRef.current) {
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        reconnectTimeoutRef.current = null;
-                        connectSocket();
-                    }, 3000);
-                }
-            };
-        } catch (error) {
-            console.error("Failed to connect WebSocket:", error);
-            if (error.response?.status === 401) {
-                localStorage.removeItem("access_token");
-                localStorage.removeItem("refresh_token");
-                localStorage.removeItem("user");
-                navigate("/login");
-                return;
-            }
-            if (!reconnectTimeoutRef.current) {
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    reconnectTimeoutRef.current = null;
-                    connectSocket();
-                }, 5000);
-            }
-        }
-    }
+    // Global socket is managed by services/socketService. We listen for dispatched events below.
 
     async function loadMessages() {
         const currentSelected = selectedUserRef.current;
@@ -649,15 +501,70 @@ function ChatArea({
     }, [selectedUser]);
 
     useEffect(() => {
-        setTimeout(() => {
-            connectSocket();
-        }, 0);
-        return () => {
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
+        // Listen for global socket messages dispatched by socketService
+        const handler = async (e) => {
+            const payload = e.detail;
+            if (!payload) return;
+
+            if (payload.type === "offer" || payload.type === "video-offer") {
+                const name = await getCallerName(payload.sender_id);
+                setIncomingCall({ ...payload, username: name });
+                return;
             }
-            socketRef.current?.close();
+
+            if (payload.type === "answer" || payload.type === "video-answer") {
+                if (peerConnectionRef.current) {
+                    try {
+                        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.data));
+                        audioSignal.stop();
+                        setCallStatus("connected");
+                        processIceQueue();
+                    } catch (err) {
+                        console.error("Error applying remote answer:", err);
+                    }
+                }
+                return;
+            }
+
+            if (payload.type === "candidate") {
+                    const candidate = new RTCIceCandidate(payload.data);
+                    console.debug('Received remote ICE candidate:', payload.data);
+                    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+                        try {
+                            await peerConnectionRef.current.addIceCandidate(candidate);
+                            console.debug('Remote ICE candidate added');
+                        } catch (err) {
+                            console.error("Error adding ICE candidate:", err);
+                        }
+                    } else {
+                        console.debug('Queueing remote ICE candidate because remoteDescription not set yet');
+                        iceCandidatesQueueRef.current.push(candidate);
+                    }
+                return;
+            }
+
+            if (payload.type === "call-ended") {
+                endCall(false);
+                return;
+            }
+
+            if (payload.content && isEncryptedMessage(payload.content)) {
+                try {
+                    payload.content = decryptMessage(payload.content);
+                } catch (e) {
+                    console.error("Failed to decrypt incoming message:", e);
+                }
+            }
+
+            const currentSelected = selectedUserRef.current;
+            if (currentSelected && (payload.sender_id === currentSelected.id || payload.receiver_id === currentSelected.id)) {
+                setMessages(prev => [...prev, payload]);
+            }
+            onMessageSent?.();
         };
+
+        window.addEventListener("socketMessage", handler);
+        return () => window.removeEventListener("socketMessage", handler);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -685,13 +592,10 @@ function ChatArea({
 
         // 2. Visibility change listener (tab visibility change / app background/foreground)
         const handleVisibilityChange = () => {
-            if (document.visibilityState === "visible") {
-                console.log("Tab visibility changed to visible: refreshing status and socket connection");
+                if (document.visibilityState === "visible") {
+                console.log("Tab visibility changed to visible: refreshing status");
                 loadUserStatus();
                 loadMessages();
-                if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
-                    connectSocket();
-                }
             }
         };
 
@@ -700,9 +604,7 @@ function ChatArea({
             console.log("Window focused: refreshing status");
             loadUserStatus();
             loadMessages();
-            if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
-                connectSocket();
-            }
+            // global socket service will handle reconnection
         };
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -770,12 +672,7 @@ function ChatArea({
             content: encryptedContent
         };
 
-        if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify(message));
-        } else {
-            console.log("Socket not connected");
-            return;
-        }
+        try { sendSocketMessage(message); } catch (e) { console.log("Socket not connected"); return; }
 
         setMessages(prev => [
             ...prev,
@@ -807,9 +704,7 @@ function ChatArea({
                 content: encryptedContent
             };
 
-            if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-                socketRef.current.send(JSON.stringify(message));
-                
+            try { sendSocketMessage(message);
                 setMessages(prev => [
                     ...prev,
                     {
@@ -820,9 +715,8 @@ function ChatArea({
                         created_at: new Date().toISOString()
                     }
                 ]);
-                
                 onMessageSent?.();
-            } else {
+            } catch (e) {
                 alert("Unable to send. Socket is disconnected.");
             }
         };
