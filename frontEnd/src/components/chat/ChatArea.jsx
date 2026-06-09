@@ -299,15 +299,9 @@ function ChatArea({
             };
 
             peer.ontrack = (event) => {
-                if (event.streams[0]) {
-                    setRemoteStream(event.streams[0]);
-                    if (remoteAudioRef.current) {
-                        remoteAudioRef.current.srcObject = event.streams[0];
-                        remoteAudioRef.current.play().catch(err => {
-                            console.warn("Failed to play remote audio element automatically:", err);
-                        });
-                    }
-                }
+                console.log("acceptCall: received remote track:", event.track);
+                const streamToUse = event.streams[0] || new MediaStream([event.track]);
+                setRemoteStream(streamToUse);
             };
 
             await peer.setRemoteDescription(new RTCSessionDescription(offer));
@@ -372,15 +366,9 @@ function ChatArea({
             };
 
             peer.ontrack = (event) => {
-                if (event.streams[0]) {
-                    setRemoteStream(event.streams[0]);
-                    if (remoteAudioRef.current) {
-                        remoteAudioRef.current.srcObject = event.streams[0];
-                        remoteAudioRef.current.play().catch(err => {
-                            console.warn("Failed to play remote audio element automatically:", err);
-                        });
-                    }
-                }
+                console.log("startVoiceCall: received remote track:", event.track);
+                const streamToUse = event.streams[0] || new MediaStream([event.track]);
+                setRemoteStream(streamToUse);
             };
 
             const offer = await peer.createOffer();
@@ -444,15 +432,9 @@ function ChatArea({
             };
 
             peer.ontrack = (event) => {
-                if (event.streams[0]) {
-                    setRemoteStream(event.streams[0]);
-                    if (remoteAudioRef.current) {
-                        remoteAudioRef.current.srcObject = event.streams[0];
-                        remoteAudioRef.current.play().catch(err => {
-                            console.warn("Failed to play remote audio element automatically:", err);
-                        });
-                    }
-                }
+                console.log("startVideoCall: received remote track:", event.track);
+                const streamToUse = event.streams[0] || new MediaStream([event.track]);
+                setRemoteStream(streamToUse);
             };
 
             const offer = await peer.createOffer();
@@ -678,6 +660,19 @@ function ChatArea({
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Automatically bind the remoteStream to the active remoteAudioRef element when either the stream updates or when the DOM element is remounted
+    useEffect(() => {
+        if (remoteAudioRef.current) {
+            console.log("Binding remote stream to audio element:", remoteStream);
+            remoteAudioRef.current.srcObject = remoteStream || null;
+            if (remoteStream) {
+                remoteAudioRef.current.play().catch(err => {
+                    console.warn("Failed to auto-play remote audio stream:", err);
+                });
+            }
+        }
+    }, [remoteStream, selectedUser]);
 
     // Periodically update user status and handle page visibility/window focus to ensure online/offline status stays synced
     useEffect(() => {
