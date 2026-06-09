@@ -41,6 +41,10 @@ func main() {
 				return true
 			}
 
+			if strings.HasPrefix(origin, "https://distribution-chat-system") && strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+
 			if extraOrigins := os.Getenv("ALLOWED_ORIGINS"); extraOrigins != "" {
 
 				for _, allowed := range strings.Split(extraOrigins, ",") {
