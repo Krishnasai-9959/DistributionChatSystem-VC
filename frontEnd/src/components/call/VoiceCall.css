@@ -248,3 +248,21 @@
         opacity: 0;
     }
 }
+
+@media (max-width: 768px) {
+    .call-btn span {
+        display: none;
+    }
+    
+    .call-btn {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 50%;
+        gap: 0;
+    }
+
+    .call-buttons-container {
+        gap: 8px;
+    }
+}

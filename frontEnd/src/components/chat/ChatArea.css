@@ -390,7 +390,32 @@ body[data-theme="dark"] .message-sent .message-timestamp {
     }
     
     .chat-header {
-        padding: 12px;
+        padding: 8px 12px;
+        gap: 8px;
+    }
+    
+    .chat-header-user-info {
+        gap: 8px;
+        max-width: 65%;
+    }
+    
+    .chat-header-avatar {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .header-text-details h3 {
+        font-size: 0.9rem;
+    }
+    
+    .header-text-details small {
+        font-size: 0.7rem;
+    }
+
+    .chat-header-actions {
+        max-width: 35%;
+        display: flex;
+        justify-content: flex-end;
     }
     
     .message {

@@ -21,7 +21,7 @@ import VideoCall from "../call/VideoCall";
 import IncomingCallModal from "../call/IncomingCallModal";
 
 import { audioSignal } from "../../utils/audioSignal";
-import { encryptMessage, decryptMessage, getFileDataFromUrl } from "../../utils/crypto";
+import { encryptMessage, decryptMessage, isEncryptedMessage, getFileDataFromUrl } from "../../utils/crypto";
 
 import "./ChatArea.css";
 
@@ -34,6 +34,12 @@ function ChatArea({
     onBack
 }) {
     const navigate = useNavigate();
+    
+    // Mirror selectedUser prop with a mutable ref to solve stale closure in socket event handlers
+    const selectedUserRef = useRef(selectedUser);
+    useEffect(() => {
+        selectedUserRef.current = selectedUser;
+    }, [selectedUser]);
 
     const [messages, setMessages] = useState([]);
     const [userStatus, setUserStatus] = useState(null);
@@ -566,7 +572,7 @@ function ChatArea({
                     return;
                 }
 
-                if (payload.content) {
+                if (payload.content && isEncryptedMessage(payload.content)) {
                     try {
                         payload.content = decryptMessage(payload.content);
                     } catch (e) {
@@ -574,7 +580,10 @@ function ChatArea({
                     }
                 }
 
-                setMessages(prev => [...prev, payload]);
+                const currentSelected = selectedUserRef.current;
+                if (currentSelected && (payload.sender_id === currentSelected.id || payload.receiver_id === currentSelected.id)) {
+                    setMessages(prev => [...prev, payload]);
+                }
                 onMessageSent?.();
             };
 
@@ -617,7 +626,7 @@ function ChatArea({
                 try {
                     return {
                         ...msg,
-                        content: msg.content ? decryptMessage(msg.content) : msg.content
+                        content: (msg.content && isEncryptedMessage(msg.content)) ? decryptMessage(msg.content) : msg.content
                     };
                 } catch (e) {
                     console.error("Failed to decrypt message in history:", e);
