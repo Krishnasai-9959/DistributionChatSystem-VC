@@ -96,7 +96,7 @@ func GetChatHistory(c *gin.Context) {
 	defer cancel()
 
 	page:=1
-	limit:=20
+	limit:=50
 
 	if p := c.Query("page"); p != "" {
 		fmt.Sscanf(p, "%d", &page)
@@ -118,7 +118,7 @@ func GetChatHistory(c *gin.Context) {
 		bson.D{
 			{
 				Key:   "created_at",
-				Value: 1,
+				Value: -1,
 			},
 		},
 	)
@@ -157,6 +157,11 @@ func GetChatHistory(c *gin.Context) {
 		})
 
 		return
+	}
+
+	// Reverse messages slice to return in chronological order (oldest first)
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
 	}
 
 	c.JSON(http.StatusOK, gin.H{
