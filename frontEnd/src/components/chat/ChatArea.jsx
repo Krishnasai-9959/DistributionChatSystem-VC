@@ -954,7 +954,7 @@ function ChatArea({
         <div className="chat-area">
             <div className="chat-header">
                 <div className="chat-header-user-info" onClick={onToggleProfile} title="Click to view contact profile">
-                    <button className="chat-back-btn" onClick={(e) => { e.stopPropagation(); window.history.back(); }} title="Back to chats">
+                    <button className="chat-back-btn" onClick={(e) => { e.stopPropagation(); onBack(); }} title="Back to chats">
                         ←
                     </button>
                     <div className="chat-header-avatar">
