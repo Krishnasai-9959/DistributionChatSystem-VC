@@ -62,6 +62,7 @@ function ChatArea({
 
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
+    const messagesContainerRef = useRef(null);
     const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
     const remoteAudioRef = useRef(null);
@@ -499,9 +500,12 @@ function ChatArea({
     }
 
     function scrollToBottom() {
-        messagesEndRef.current?.scrollIntoView({
-            behavior: "smooth"
-        });
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: "smooth"
+            });
+        }
     }
 
     async function connectSocket() {
@@ -951,7 +955,11 @@ function ChatArea({
         : "Offline";
 
     return (
-        <div className="chat-area">
+        <div 
+            className="chat-area"
+            style={chatWallpaper ? { backgroundImage: `url(${chatWallpaper})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}
+        >
+            {!chatWallpaper && <div className="chat-messages-pattern"></div>}
             <div className="chat-header">
                 <div className="chat-header-user-info" onClick={onToggleProfile} title="Click to view contact profile">
                     <button className="chat-back-btn" onClick={(e) => { e.stopPropagation(); onBack(); }} title="Back to chats">
@@ -985,10 +993,9 @@ function ChatArea({
             </div>
 
             <div 
+                ref={messagesContainerRef}
                 className="chat-messages"
-                style={chatWallpaper ? { backgroundImage: `url(${chatWallpaper})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}
             >
-                {!chatWallpaper && <div className="chat-messages-pattern"></div>}
                 {messages.length === 0 ? (
                     <div className="no-messages">
                         No messages yet. Start chatting.
@@ -1036,41 +1043,60 @@ function ChatArea({
                 autoPlay
             />
 
-            <div className="chat-input-container">
-                <label className="attachment-btn" title="Attach Document">
-                    📎
+            <div className="chat-input-wrapper-whatsapp">
+                <div className="chat-input-pill-whatsapp">
+                    <button className="input-action-btn-whatsapp" title="Emojis" type="button">
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="whatsapp-svg-icon">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                            <line x1="9" y1="9" x2="9.01" y2="9" />
+                            <line x1="15" y1="9" x2="15.01" y2="9" />
+                        </svg>
+                    </button>
+
                     <input
-                        type="file"
-                        accept="application/zip,application/x-zip-compressed,application/pdf,text/plain,.zip,.rar,.pdf,.doc,.docx,.xls,.xlsx"
-                        onChange={handleFileAttachment}
-                        style={{ display: "none" }}
+                        type="text"
+                        placeholder="Message"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                handleSend();
+                            }
+                        }}
+                        className="whatsapp-text-input"
                     />
-                </label>
 
-                <label className="attachment-btn" title="Attach Photo">
-                    📷
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileAttachment}
-                        style={{ display: "none" }}
-                    />
-                </label>
+                    <label className="input-action-btn-whatsapp" title="Attach Document">
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="whatsapp-svg-icon">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                        </svg>
+                        <input
+                            type="file"
+                            accept="application/zip,application/x-zip-compressed,application/pdf,text/plain,.zip,.rar,.pdf,.doc,.docx,.xls,.xlsx"
+                            onChange={handleFileAttachment}
+                            style={{ display: "none" }}
+                        />
+                    </label>
 
-                <input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            handleSend();
-                        }
-                    }}
-                />
+                    <label className="input-action-btn-whatsapp" title="Attach Photo">
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="whatsapp-svg-icon">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                        </svg>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileAttachment}
+                            style={{ display: "none" }}
+                        />
+                    </label>
+                </div>
 
-                <button onClick={handleSend} className="send-btn" title="Send message">
-                    Send
+                <button onClick={handleSend} className="chat-send-circle-whatsapp" title="Send message">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="whatsapp-send-icon">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
                 </button>
             </div>
         </div>
