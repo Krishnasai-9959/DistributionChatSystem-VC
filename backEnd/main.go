@@ -6,6 +6,7 @@ import (
 	"backEnd/websocket"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -22,16 +23,42 @@ func main() {
 	database.ConnectRedis()
 
 	router := gin.Default()
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:5173",
-			"https://YOUR-VERCEL-APP.vercel.app",
+
+		AllowOriginFunc: func(origin string) bool {
+
+			allowedOrigins := map[string]bool{
+
+				"http://localhost:5173": true,
+
+				"http://127.0.0.1:5173": true,
+
+				"https://distribution-chat-system-vc.vercel.app": true,
+			}
+
+			if allowedOrigins[origin] {
+				return true
+			}
+
+			if extraOrigins := os.Getenv("ALLOWED_ORIGINS"); extraOrigins != "" {
+
+				for _, allowed := range strings.Split(extraOrigins, ",") {
+
+					if strings.TrimSpace(allowed) == origin {
+						return true
+					}
+				}
+			}
+
+			return false
 		},
 
 		AllowMethods: []string{
 			"GET",
 			"POST",
 			"PUT",
+			"PATCH",
 			"DELETE",
 			"OPTIONS",
 		},
@@ -58,18 +85,33 @@ func main() {
 
 	routes.AuthRoutes(router)
 
-	// websocket route
-	router.GET("/ws", websocket.HandleConnections)
+	router.GET(
+		"/ws",
+		websocket.HandleConnections,
+	)
 
-	// start broadcaster
 	go websocket.HandleMessages()
+
 	go websocket.HandleCallSignals()
 
 	port := os.Getenv("PORT")
 
 	if port == "" {
+
 		port = "8080"
 	}
 
-	router.Run(":" + port)
+	log.Println(
+		"Server running on port:",
+		port,
+	)
+
+	err := router.Run(
+		":" + port,
+	)
+
+	if err != nil {
+
+		log.Fatal(err)
+	}
 }
