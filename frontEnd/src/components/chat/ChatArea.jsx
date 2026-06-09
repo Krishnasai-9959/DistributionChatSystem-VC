@@ -676,6 +676,44 @@ function ChatArea({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Periodically update user status and handle page visibility/window focus to ensure online/offline status stays synced
+    useEffect(() => {
+        if (!selectedUser) return;
+
+        // 1. Setup interval to poll status every 6 seconds
+        const intervalId = setInterval(() => {
+            loadUserStatus();
+        }, 6000);
+
+        // 2. Visibility change listener (tab visibility change / app background/foreground)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                console.log("Tab visibility changed to visible: refreshing status and socket connection");
+                loadUserStatus();
+                if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
+                    connectSocket();
+                }
+            }
+        };
+
+        // 3. Window focus listener (browser window focused)
+        const handleWindowFocus = () => {
+            console.log("Window focused: refreshing status");
+            loadUserStatus();
+            if (!socketRef.current || socketRef.current.readyState === WebSocket.CLOSED || socketRef.current.readyState === WebSocket.CLOSING) {
+                connectSocket();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("focus", handleWindowFocus);
+
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("focus", handleWindowFocus);
+        };
+    }, [selectedUser]);
 
     useEffect(() => {
         scrollToBottom();
