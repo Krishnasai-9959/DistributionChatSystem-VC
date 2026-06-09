@@ -200,6 +200,7 @@ func HandleConnections(c *gin.Context) {
 
 		case "offer":
 
+			fmt.Println("[call] enqueue offer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "offer",
 				SenderID:   userID,
@@ -208,7 +209,7 @@ func HandleConnections(c *gin.Context) {
 			}
 
 		case "video-offer":
-
+			fmt.Println("[call] enqueue video-offer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "video-offer",
 				SenderID:   userID,
@@ -217,7 +218,7 @@ func HandleConnections(c *gin.Context) {
 			}
 
 		case "answer":
-
+			fmt.Println("[call] enqueue answer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "answer",
 				SenderID:   userID,
@@ -226,7 +227,7 @@ func HandleConnections(c *gin.Context) {
 			}
 
 		case "video-answer":
-
+			fmt.Println("[call] enqueue video-answer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "video-answer",
 				SenderID:   userID,
@@ -235,7 +236,7 @@ func HandleConnections(c *gin.Context) {
 			}
 
 		case "candidate":
-
+			fmt.Println("[call] enqueue candidate from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "candidate",
 				SenderID:   userID,
@@ -244,7 +245,7 @@ func HandleConnections(c *gin.Context) {
 			}
 
 		case "call-ended":
-
+			fmt.Println("[call] enqueue call-ended from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 			callBroadcast <- models.CallSignal{
 				Type:       "call-ended",
 				SenderID:   userID,
@@ -312,6 +313,9 @@ func HandleCallSignals() {
 	for {
 
 		signal := <-callBroadcast
+
+		// Log dequeue time for diagnostics
+		fmt.Println("[call] dequeue signal:", signal.Type, "from:", signal.SenderID, "to:", signal.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
 
 		mutex.Lock()
 

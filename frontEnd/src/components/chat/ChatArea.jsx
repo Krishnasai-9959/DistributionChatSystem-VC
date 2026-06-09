@@ -70,13 +70,20 @@ function ChatArea({
     const timerRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
 
-    const rtcConfig = {
-        iceServers: [
-            {
-                urls: "stun:stun.l.google.com:19302"
+    // Allow optional TURN servers via env var VITE_TURN_SERVERS (JSON array)
+    let rtcConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    try {
+        const turnEnv = import.meta.env.VITE_TURN_SERVERS;
+        if (turnEnv) {
+            const parsed = JSON.parse(turnEnv);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                rtcConfig = { iceServers: parsed };
             }
-        ]
-    };
+        }
+    } catch (e) {
+        console.warn('Invalid VITE_TURN_SERVERS, expecting JSON array:', e);
+    }
+    console.debug('RTC config used:', rtcConfig);
 
     const currentUser = JSON.parse(
         localStorage.getItem("user") || "{}"

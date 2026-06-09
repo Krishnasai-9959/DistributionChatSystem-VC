@@ -41,6 +41,11 @@ async function startSocket() {
                 return;
             }
 
+            // Log receive time for diagnostics
+            try {
+                console.debug('[socketService] received', payload.type, 'from', payload.sender_id, 'at', new Date().toISOString());
+            } catch (e) { /* ignore */ }
+
             // Play ringtone and show notification for incoming offers when not visible
             if (payload.type === "offer" || payload.type === "video-offer") {
                 const senderName = payload.username || payload.sender_name || `User (${(payload.sender_id||'').substring(0,6)})`;
@@ -103,6 +108,7 @@ function sendSocketMessage(message) {
     try {
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify(message));
+            try { console.debug('[socketService] sent', message.type, 'to', message.receiver_id, 'at', new Date().toISOString()); } catch (e) {}
         } else {
             console.warn("Socket not open, message dropped", message);
         }
