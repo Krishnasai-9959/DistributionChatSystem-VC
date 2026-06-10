@@ -96,7 +96,7 @@ func main() {
 
 	go websocket.HandleMessages()
 
-	go websocket.HandleCallSignals()
+
 
 	port := os.Getenv("PORT")
 

@@ -27,7 +27,7 @@ func GenerateZegoToken(c *gin.Context) {
 	appID := uint32(appIDParsed)
 
 	// Get the user ID from the JWT token (set by AuthMiddleware)
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return

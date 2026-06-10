@@ -15,20 +15,37 @@ export const initZegoCloud = async (user) => {
         }
         const appID = Number(rawAppID);
 
-        let serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
-        if (typeof serverSecret === "string") {
-            serverSecret = serverSecret.replace(/['"]/g, "").trim();
-        }
-
-        if (!appID || !serverSecret) {
-            console.error("ZegoCloud appID or serverSecret is missing from frontend env variables");
+        if (!appID) {
+            console.error("ZegoCloud appID is missing from frontend env variables");
             return null;
         }
 
-        // Generate temporary test kit token locally on client-side
-        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            console.error("No access token found in localStorage");
+            return null;
+        }
+
+        // Fetch Zego token securely from backend
+        const response = await axios.get(
+            `${import.meta.env.VITE_API_URL}/api/call/token`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        );
+        const zegoToken = response.data.token;
+
+        if (!zegoToken) {
+            console.error("Failed to retrieve Zego token from server");
+            return null;
+        }
+
+        // Generate production kitToken wrapping the backend-generated token
+        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForProduction(
             appID,
-            serverSecret,
+            zegoToken,
             "", // roomID is not needed for ZIM global invitation plugin initialization
             user.id,
             user.username

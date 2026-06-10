@@ -14,11 +14,9 @@ import {
     getConversations
 } from "../../services/chatService";
 
-import IncomingCallModal from "../call/IncomingCallModal";
-import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
-
 import { encryptMessage, decryptMessage, isEncryptedMessage, getFileDataFromUrl } from "../../utils/crypto";
 import { sendSocketMessage } from "../../services/socketService";
+import { startZegoCall } from "../../utils/zego";
 
 import "./ChatArea.css";
 
@@ -43,12 +41,6 @@ function ChatArea({
     const [messages, setMessages] = useState([]);
     const [userStatus, setUserStatus] = useState(null);
     const [newMessage, setNewMessage] = useState("");
-    const [incomingCall, setIncomingCall] = useState(null);
-    const [inCall, setInCall] = useState(false);
-    const [callStatus, setCallStatus] = useState(null);
-    const [callDuration, setCallDuration] = useState(0);
-    const [callerName, setCallerName] = useState("");
-    const [callType, setCallType] = useState(null);
 
     // Profile Details Sync State
     const [userProfilePic, setUserProfilePic] = useState("");
@@ -58,10 +50,6 @@ function ChatArea({
     // socket is now global (services/socketService); local ref removed
     const messagesEndRef = useRef(null);
     const messagesContainerRef = useRef(null);
-    const zegoContainerRef = useRef(null);
-    const zegoInstanceRef = useRef(null);
-    const zegoRoomIDRef = useRef(null);
-    const timerRef = useRef(null);
 
     const currentUser = JSON.parse(
         localStorage.getItem("user") || "{}"
@@ -139,225 +127,7 @@ function ChatArea({
         };
     }, [selectedUser]);
 
-    useEffect(() => {
-        if (inCall && zegoContainerRef.current) {
-            const initZego = async () => {
-                try {
-                    let rawAppID = import.meta.env.VITE_ZEGO_APP_ID;
-                    if (typeof rawAppID === "string") {
-                        rawAppID = rawAppID.replace(/['"]/g, "").trim();
-                    }
-                    const appID = Number(rawAppID);
 
-                    let serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
-                    if (typeof serverSecret === "string") {
-                        serverSecret = serverSecret.replace(/['"]/g, "").trim();
-                    }
-                    
-                    console.log("Initializing ZegoCloud calling: AppID =", appID, "ServerSecret set =", !!serverSecret, "CallType =", callType);
-
-                    if (!appID || !serverSecret) {
-                        console.error("ZegoCloud appID or serverSecret is missing from env");
-                        alert("Call system configuration error. Please check environment variables.");
-                        endCall(false);
-                        return;
-                    }
-
-                    const roomID = zegoRoomIDRef.current || `room_${currentUser.id.substring(0, 6)}_${selectedUser?.id?.substring(0, 6) || 'guest'}_${Date.now()}`;
-                    zegoRoomIDRef.current = roomID;
-
-                    const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
-                        appID,
-                        serverSecret,
-                        roomID,
-                        currentUser.id,
-                        currentUser.username || `User_${currentUser.id.substring(0, 4)}`
-                    );
-
-                    const zp = ZegoUIKitPrebuilt.create(kitToken);
-                    zegoInstanceRef.current = zp;
-
-                    zp.joinRoom({
-                        container: zegoContainerRef.current,
-                        sharedLinks: [],
-                        scenario: {
-                            mode: ZegoUIKitPrebuilt.OneONoneCall
-                        },
-                        turnOnCameraWhenJoining: callType === "video",
-                        showMyCameraToggleButton: callType === "video",
-                        showScreenSharingButton: callType === "video",
-                        turnOnMicrophoneWhenJoining: true,
-                        showMyMicrophoneToggleButton: true,
-                        showAudioVideoSettingsButton: true,
-                        showTextChat: false,
-                        showUserList: false,
-                        maxUsers: 2,
-                        layout: "Grid",
-                        showLayoutButton: false,
-                        onLeaveRoom: () => {
-                            endCall(true);
-                        }
-                    });
-                } catch (err) {
-                    console.error("ZegoCloud initialization failed:", err);
-                    endCall(false);
-                }
-            };
-
-            initZego();
-        } else {
-            if (zegoInstanceRef.current) {
-                try {
-                    zegoInstanceRef.current.destroy();
-                } catch (e) {
-                    console.warn("Error destroying Zego instance:", e);
-                }
-                zegoInstanceRef.current = null;
-            }
-        }
-    }, [inCall, callType]);
-
-    async function getCallerName(callerId) {
-        if (selectedUser && selectedUser.id === callerId) {
-            return selectedUser.username;
-        }
-        try {
-            const response = await getConversations();
-            const conv = (response.conversations || []).find(c => c.user_id === callerId);
-            if (conv) return conv.username;
-        } catch (e) {
-            console.error("Error fetching caller name:", e);
-        }
-        return `User (${callerId.substring(0, 6)})`;
-    }
-
-    function endCall(sendSignal = true) {
-        if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-        }
-
-        const receiverId = selectedUser?.id || (incomingCall ? incomingCall.sender_id : null);
-
-        if (sendSignal && receiverId) {
-            try {
-                sendSocketMessage({
-                    type: "call-ended",
-                    receiver_id: receiverId
-                });
-            } catch (e) {
-                console.error("Failed sending call-ended signal:", e);
-            }
-        }
-
-        if (zegoInstanceRef.current) {
-            try {
-                zegoInstanceRef.current.destroy();
-            } catch (e) {
-                console.warn("Error destroying Zego instance:", e);
-            }
-            zegoInstanceRef.current = null;
-        }
-        zegoRoomIDRef.current = null;
-
-        setInCall(false);
-        setIncomingCall(null);
-        setCallStatus(null);
-        setCallType(null);
-        setCallDuration(0);
-    }
-
-    function rejectCall() {
-        if (!incomingCall) return;
-
-        const callerId = incomingCall.sender_id;
-
-        try {
-            sendSocketMessage({
-                type: "call-ended",
-                receiver_id: callerId
-            });
-        } catch (e) {
-            console.error("Failed sending reject signal:", e);
-        }
-
-        setIncomingCall(null);
-    }
-
-    async function acceptCall() {
-        if (!incomingCall) return;
-
-        const callerId = incomingCall.sender_id;
-        const roomID = incomingCall.data?.roomID;
-        const incomingCallType = incomingCall.data?.callType || (incomingCall.type === "video-offer" ? "video" : "voice");
-
-        // Open caller chat
-        if (onUserSelect) {
-            onUserSelect({
-                id: callerId,
-                username: incomingCall.username || `User (${callerId.substring(0, 6)})`
-            });
-        }
-
-        zegoRoomIDRef.current = roomID;
-        setCallerName(incomingCall.username);
-        setInCall(true);
-        setCallStatus("connected");
-        setCallType(incomingCallType);
-        setIncomingCall(null);
-
-        try {
-            sendSocketMessage({
-                type: incomingCallType === "video" ? "video-answer" : "answer",
-                receiver_id: callerId,
-                data: { roomID }
-            });
-        } catch (e) {
-            console.error("Failed sending answer:", e);
-        }
-    }
-
-    async function startVoiceCall() {
-        if (!selectedUser) return;
-        const roomID = `room_${currentUser.id.substring(0, 6)}_${selectedUser.id.substring(0, 6)}_${Date.now()}`;
-        zegoRoomIDRef.current = roomID;
-
-        setCallerName(selectedUser.username);
-        setInCall(true);
-        setCallStatus("calling");
-        setCallType("voice");
-
-        try {
-            sendSocketMessage({
-                type: "offer",
-                receiver_id: selectedUser.id,
-                data: { roomID, callType: "voice" }
-            });
-        } catch (e) {
-            console.error("Failed sending offer:", e);
-        }
-    }
-
-    async function startVideoCall() {
-        if (!selectedUser) return;
-        const roomID = `room_${currentUser.id.substring(0, 6)}_${selectedUser.id.substring(0, 6)}_${Date.now()}`;
-        zegoRoomIDRef.current = roomID;
-
-        setCallerName(selectedUser.username);
-        setInCall(true);
-        setCallStatus("calling");
-        setCallType("video");
-
-        try {
-            sendSocketMessage({
-                type: "video-offer",
-                receiver_id: selectedUser.id,
-                data: { roomID, callType: "video" }
-            });
-        } catch (e) {
-            console.error("Failed sending video-offer:", e);
-        }
-    }
 
     function scrollToBottom() {
         if (messagesContainerRef.current) {
@@ -419,26 +189,7 @@ function ChatArea({
             const payload = e.detail;
             if (!payload) return;
 
-            if (payload.type === "offer" || payload.type === "video-offer") {
-                const name = await getCallerName(payload.sender_id);
-                setIncomingCall({ ...payload, username: name });
-                return;
-            }
 
-            if (payload.type === "answer" || payload.type === "video-answer") {
-                setCallStatus("connected");
-                return;
-            }
-
-            if (payload.type === "candidate") {
-                // ZegoCloud manages ICE candidates automatically
-                return;
-            }
-
-            if (payload.type === "call-ended") {
-                endCall(false);
-                return;
-            }
             if (payload.content && isEncryptedMessage(payload.content)) {
                 try {
                     payload.content = decryptMessage(payload.content);
@@ -505,32 +256,7 @@ function ChatArea({
         }
     }, [userStatus, onStatusUpdate]);
 
-    useEffect(() => {
-        if (callStatus === "connected") {
-            timerRef.current = setInterval(() => {
-                setCallDuration(prev => prev + 1);
-            }, 1000);
-        } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
-        }
 
-        return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        };
-    }, [callStatus]);
-
-    useEffect(() => {
-        return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
-        };
-    }, []);
 
     const handleSend = () => {
         if (!newMessage.trim() || !selectedUser) return;
@@ -748,27 +474,6 @@ function ChatArea({
                     <h3>Select a conversation to start chatting</h3>
                     <p>Select contacts from the sidebar search or history list to connect.</p>
                 </div>
-                <IncomingCallModal
-                    caller={incomingCall}
-                    onAccept={acceptCall}
-                    onReject={rejectCall}
-                    onBannerClick={() => {
-                        if (incomingCall && onUserSelect) {
-                            onUserSelect({
-                                id: incomingCall.sender_id,
-                                username: incomingCall.username || `User (${incomingCall.sender_id.substring(0, 6)})`
-                            });
-                        }
-                    }}
-                />
-
-                {inCall && (
-                    <div 
-                        className="zego-call-container" 
-                        ref={zegoContainerRef} 
-                        style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 9999, backgroundColor: '#1a1a1a' }}
-                    />
-                )}
             </div>
         );
     }
@@ -810,13 +515,13 @@ function ChatArea({
  
                 <div className="chat-header-actions">
                     <div className="call-buttons-container">
-                        <button className="call-btn voice-btn" onClick={startVoiceCall} title="Start Voice Call">
+                        <button className="call-btn voice-btn" onClick={() => startZegoCall(zpInstance, selectedUser, false)} title="Start Voice Call">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                 <path d="M6.62 10.79a15.15 15.15 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.11-.27 11.72 11.72 0 0 0 3.7.59 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.72 11.72 0 0 0 .59 3.7 1 1 0 0 1-.27 1.11z"/>
                             </svg>
                             <span>Voice Call</span>
                         </button>
-                        <button className="call-btn video-btn" onClick={startVideoCall} title="Start Video Call">
+                        <button className="call-btn video-btn" onClick={() => startZegoCall(zpInstance, selectedUser, true)} title="Start Video Call">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                 <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
                             </svg>
@@ -839,28 +544,6 @@ function ChatArea({
                 )}
                 <div ref={messagesEndRef} />
             </div>
-
-            <IncomingCallModal
-                caller={incomingCall}
-                onAccept={acceptCall}
-                onReject={rejectCall}
-                onBannerClick={() => {
-                    if (incomingCall && onUserSelect) {
-                        onUserSelect({
-                            id: incomingCall.sender_id,
-                            username: incomingCall.username || `User (${incomingCall.sender_id.substring(0, 6)})`
-                        });
-                    }
-                }}
-            />
-
-            {inCall && (
-                <div 
-                    className="zego-call-container" 
-                    ref={zegoContainerRef} 
-                    style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 9999, backgroundColor: '#1a1a1a' }}
-                />
-            )}
             <div className="chat-input-wrapper-whatsapp">
                 <div className="chat-input-pill-whatsapp">
                     <button className="input-action-btn-whatsapp" title="Emojis" type="button">

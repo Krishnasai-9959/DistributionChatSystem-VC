@@ -43,7 +43,7 @@ func getClientMutex(userID string) *sync.Mutex {
 // channels
 var broadcast = make(chan models.Message, 1000)
 
-var callBroadcast = make(chan models.CallSignal, 1000)
+
 
 // Handle websocket connections
 func HandleConnections(c *gin.Context) {
@@ -198,59 +198,6 @@ func HandleConnections(c *gin.Context) {
 
 			broadcast <- msg
 
-		case "offer":
-
-			fmt.Println("[call] enqueue offer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "offer",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-				Data:       payload.Data,
-			}
-
-		case "video-offer":
-			fmt.Println("[call] enqueue video-offer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "video-offer",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-				Data:       payload.Data,
-			}
-
-		case "answer":
-			fmt.Println("[call] enqueue answer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "answer",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-				Data:       payload.Data,
-			}
-
-		case "video-answer":
-			fmt.Println("[call] enqueue video-answer from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "video-answer",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-				Data:       payload.Data,
-			}
-
-		case "candidate":
-			fmt.Println("[call] enqueue candidate from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "candidate",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-				Data:       payload.Data,
-			}
-
-		case "call-ended":
-			fmt.Println("[call] enqueue call-ended from:", userID, "to:", payload.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-			callBroadcast <- models.CallSignal{
-				Type:       "call-ended",
-				SenderID:   userID,
-				ReceiverID: payload.ReceiverID,
-			}
 		}
 	}
 }
@@ -307,36 +254,4 @@ func HandleMessages() {
 	}
 }
 
-// Voice call signaling router
-func HandleCallSignals() {
 
-	for {
-
-		signal := <-callBroadcast
-
-		// Log dequeue time for diagnostics
-		fmt.Println("[call] dequeue signal:", signal.Type, "from:", signal.SenderID, "to:", signal.ReceiverID, "at:", time.Now().Format(time.RFC3339Nano))
-
-		mutex.Lock()
-
-		receiverConn,
-			ok := clients[signal.ReceiverID]
-
-		mutex.Unlock()
-
-		if ok {
-			go func(conn *websocket.Conn, sig models.CallSignal, rID string) {
-				m := getClientMutex(rID)
-				m.Lock()
-				defer m.Unlock()
-
-				conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-				err := conn.WriteJSON(sig)
-
-				if err != nil {
-					fmt.Println("Call signal error:", err)
-				}
-			}(receiverConn, signal, signal.ReceiverID)
-		}
-	}
-}
