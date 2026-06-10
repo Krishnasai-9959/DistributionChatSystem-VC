@@ -7,19 +7,38 @@ import { startSocket } from "../services/socketService";
 
 import "./ChatDashboard.css";
 
+import { initZegoCloud } from "../utils/zego";
+
 function ChatDashboard() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [selectedUserStatus, setSelectedUserStatus] = useState(null);
     const [refreshConversations, setRefreshConversations] = useState(0);
     const [showProfilePanel, setShowProfilePanel] = useState(false);
     const [currentMessages, setCurrentMessages] = useState([]);
+    const [zpInstance, setZpInstance] = useState(null);
     const [theme, setTheme] = useState(() => {
         return localStorage.getItem("theme") || "light";
     });
 
-    // Start socket connection when dashboard mounts
+    // Start socket connection when dashboard mounts and initialize ZegoCloud global call invitations
     useEffect(() => {
         startSocket().catch(err => console.warn("startSocket error:", err));
+
+        const userStr = localStorage.getItem("user");
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                initZegoCloud(user).then((zp) => {
+                    if (zp) {
+                        setZpInstance(zp);
+                    }
+                }).catch(err => {
+                    console.error("Error inside initZegoCloud:", err);
+                });
+            } catch (e) {
+                console.error("Failed to init ZegoCloud", e);
+            }
+        }
     }, []);
 
     // Handle theme side effects
@@ -88,6 +107,7 @@ function ChatDashboard() {
                     onStatusUpdate={setSelectedUserStatus}
                     onToggleProfile={() => setShowProfilePanel(prev => !prev)}
                     onBack={() => setSelectedUser(null)}
+                    zpInstance={zpInstance}
                 />
             </div>
 

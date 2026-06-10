@@ -32,4 +32,5 @@ func AuthRoutes(router *gin.Engine) {
 	protected.GET("/users/search",controllers.SearchUsers,)
 	protected.POST("/socket-token",controllers.GenerateSocketToken,)
 	protected.GET("/users/status/:userId",controllers.GetUserStatus,)
+	protected.GET("/call/token",controllers.GenerateZegoToken,)
 }

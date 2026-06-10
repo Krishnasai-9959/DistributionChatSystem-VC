@@ -29,7 +29,8 @@ function ChatArea({
     onMessagesUpdate,
     onStatusUpdate,
     onToggleProfile,
-    onBack
+    onBack,
+    zpInstance
 }) {
     const navigate = useNavigate();
     
@@ -438,7 +439,6 @@ function ChatArea({
                 endCall(false);
                 return;
             }
-
             if (payload.content && isEncryptedMessage(payload.content)) {
                 try {
                     payload.content = decryptMessage(payload.content);
@@ -748,7 +748,6 @@ function ChatArea({
                     <h3>Select a conversation to start chatting</h3>
                     <p>Select contacts from the sidebar search or history list to connect.</p>
                 </div>
-
                 <IncomingCallModal
                     caller={incomingCall}
                     onAccept={acceptCall}
@@ -808,7 +807,7 @@ function ChatArea({
                         )}
                     </div>
                 </div>
-
+ 
                 <div className="chat-header-actions">
                     <div className="call-buttons-container">
                         <button className="call-btn voice-btn" onClick={startVoiceCall} title="Start Voice Call">
@@ -826,7 +825,7 @@ function ChatArea({
                     </div>
                 </div>
             </div>
-
+ 
             <div 
                 ref={messagesContainerRef}
                 className="chat-messages"
@@ -862,7 +861,6 @@ function ChatArea({
                     style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 9999, backgroundColor: '#1a1a1a' }}
                 />
             )}
-
             <div className="chat-input-wrapper-whatsapp">
                 <div className="chat-input-pill-whatsapp">
                     <button className="input-action-btn-whatsapp" title="Emojis" type="button">
