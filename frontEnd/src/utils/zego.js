@@ -2,7 +2,6 @@ import axios from 'axios';
 import { ZIM } from 'zego-zim-web';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 
-// Initialize ZegoCloud for global call invitations
 export const initZegoCloud = async (user) => {
     if (!user || !user.id || !user.username) {
         console.warn("ZegoCloud init failed: Invalid user object", user);
@@ -10,16 +9,32 @@ export const initZegoCloud = async (user) => {
     }
 
     try {
-        // Fetch the token securely from the backend
-        const accessToken = localStorage.getItem("access_token");
-        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/call/token`, {
-            headers: {
-                Authorization: `Bearer ${accessToken}`
-            }
-        });
-        const token = response.data.token;
+        let rawAppID = import.meta.env.VITE_ZEGO_APP_ID;
+        if (typeof rawAppID === "string") {
+            rawAppID = rawAppID.replace(/['"]/g, "").trim();
+        }
+        const appID = Number(rawAppID);
 
-        const zp = ZegoUIKitPrebuilt.create(token);
+        let serverSecret = import.meta.env.VITE_ZEGO_SERVER_SECRET;
+        if (typeof serverSecret === "string") {
+            serverSecret = serverSecret.replace(/['"]/g, "").trim();
+        }
+
+        if (!appID || !serverSecret) {
+            console.error("ZegoCloud appID or serverSecret is missing from frontend env variables");
+            return null;
+        }
+
+        // Generate temporary test kit token locally on client-side
+        const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
+            appID,
+            serverSecret,
+            "", // roomID is not needed for ZIM global invitation plugin initialization
+            user.id,
+            user.username
+        );
+
+        const zp = ZegoUIKitPrebuilt.create(kitToken);
         
         // Add ZIM plugin for Call Invitation functionality (WhatsApp-like ringing)
         zp.addPlugins({ ZIM });
